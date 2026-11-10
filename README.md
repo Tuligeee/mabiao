@@ -4,12 +4,34 @@
 
 - 线上：http://47.114.33.192/meter/
 - 本地开发：http://127.0.0.1:8899/
+- 仓库：https://github.com/Tuligeee/mabiao
 
 ## 开发流程
 
 ```
-改本地代码  →  git commit  →  跑 deploy/deploy.py 上传
+改本地代码  →  git commit  →  部署 + 推 GitHub
 ```
+
+两个命令：
+
+```powershell
+# 推到服务器（只传代码，数据库不动）
+.\deploy\deploy.ps1
+
+# 推到 GitHub（经服务器中转，见下）
+& "C:\Users\Tuilge\.workbuddy\binaries\python\envs\default\Scripts\python.exe" deploy\push_github.py
+```
+
+**为什么推 GitHub 要绕服务器**：这台电脑连不上 github.com（DNS 和 TLS 都过不去）。服务器上有部署密钥、能直连，所以流程是「本地打包 → 传服务器 → 服务器推」。
+
+服务器上的两把钥匙，各管一个仓库：
+
+| 密钥 | 仓库 | SSH Host 别名 |
+|---|---|---|
+| `~/.ssh/cwsj_deploy` | `Tuligeee/cwsj` | `github.com` |
+| `~/.ssh/mabiao_deploy` | `Tuligeee/mabiao` | `github-mabiao` |
+
+GitHub 的部署密钥全局唯一，一把 key 只能挂一个仓库，所以必须分开。
 
 **部署规矩（重要）**
 
