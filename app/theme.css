@@ -1,0 +1,75 @@
+/* 品牌层：白底 + 中性灰 + 一个蓝。对比度已实测（见交付说明）。
+   唯一入口：先引 tokens，再覆盖语义色。 */
+@import url("tokens.css");
+
+:root {
+  --bg:        #F6F6F7;
+  --card:      #FFFFFF;
+  --ink:       #101012;
+  --ink-2:     #55555C;
+  --ink-3:     #6B6B73;
+  --ink-4:     #A0A0A7;
+  --line:      #E8E8EB;
+  --line-2:    #DDDDE1;
+  --line-3:    #CFCFD4;
+  --accent:    #2563EB;
+  --accent-dk: #1D4ED8;
+  --accent-pr: #1E40AF;
+  --accent-bg: #EFF4FF;
+  --ok:        #16794C;
+  --ok-bg:     #F0F9F4;
+  --bad:       #B42318;
+  --bad-bg:    #FEF3F2;
+  --warn:      #8A5A00;
+  --warn-bg:   #FFFAEB;
+  --hover:     #F4F4F6;
+  --hover-2:   #ECECEF;
+  --disabled-bg: #F2F2F4;
+  --on-solid:  #FFFFFF;
+
+  /* 2px 步进，只用于小控件内部微调 */
+  --space-0.5: calc(var(--space-1) / 2);
+  --space-1.5: calc(var(--space-1) + var(--space-0.5));
+  --space-2.5: calc(var(--space-2) + var(--space-0.5));
+
+  --rail-w: 240px;
+  --pane-max: 1280px;
+  --ctl-h: 40px;
+  --ctl-h-sm: 30px;
+  --pop-max: 320px;
+  --dp-w: 288px;
+  --dlg-w: 440px;
+
+  --shadow-pop: 0 12px 32px -16px rgba(16, 16, 18, 0.24);
+  --shadow-card: 0 1px 2px rgba(16, 16, 18, 0.04);
+  --shadow-dlg: 0 24px 56px -24px rgba(16, 16, 18, 0.32);
+  --scrim: rgba(16, 16, 18, 0.28);
+
+  --color-surface-page: var(--bg);
+  --color-surface-card: var(--card);
+  --color-surface-raised: var(--card);
+  --color-surface-sunken: var(--bg);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--ink-2);
+  --color-text-tertiary: var(--ink-3);
+  --color-border-default: var(--line);
+  --color-border-strong: var(--ink-3);
+  --color-border-focus: var(--accent);
+  --color-action-primary: var(--accent);
+  --color-action-primary-hover: var(--accent-dk);
+  --color-action-primary-active: var(--accent-pr);
+  --color-text-on-action: var(--on-solid);
+  --color-action-secondary: var(--hover);
+  --color-action-secondary-hover: var(--hover-2);
+  --color-action-secondary-active: var(--line-2);
+  --color-feedback-success-text: var(--ok);
+  --color-feedback-success-bg: var(--ok-bg);
+  --color-feedback-success-border: #CFE7DA;
+  --color-feedback-error-text: var(--bad);
+  --color-feedback-error-bg: var(--bad-bg);
+  --color-feedback-error-border: #F2D3CF;
+  --color-feedback-warning-text: var(--warn);
+  --color-feedback-warning-bg: var(--warn-bg);
+  --color-feedback-warning-border: #EBD9A8;
+  --shadow-focus-ring: 0 0 0 2px var(--card), 0 0 0 4px var(--accent);
+}

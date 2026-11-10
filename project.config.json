@@ -1,0 +1,61 @@
+{
+  "miniprogramRoot": "miniprogram/miniprogram/",
+  "cloudfunctionRoot": "miniprogram/cloudfunctions/",
+  "compileType": "miniprogram",
+  "appid": "wxe5c0c0d0d950780e",
+  "projectname": "码表线上化",
+  "libVersion": "2.20.1",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "uglifyFileName": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": false,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "useMultiFrameRuntime": true,
+    "useApiHook": true,
+    "useApiHostProcess": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "enableEngineNative": false,
+    "useIsolateContext": true,
+    "userConfirmedBundleSwitch": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "disableUseStrict": false,
+    "minifyWXML": true,
+    "showES6CompileOption": false,
+    "useCompilerPlugins": false,
+    "ignoreUploadUnusedFiles": true
+  },
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "app" },
+      { "type": "folder", "value": "_probe" },
+      { "type": "suffix", "value": ".py" },
+      { "type": "suffix", "value": ".txt" },
+      { "type": "suffix", "value": ".xlsx" },
+      { "type": "suffix", "value": ".md" }
+    ],
+    "include": []
+  },
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  },
+  "simulatorPluginLibVersion": {}
+}

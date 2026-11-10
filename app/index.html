@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>码表核对</title>
+<link rel="stylesheet" href="theme.css?v=31">
+<link rel="stylesheet" href="app.css?v=31">
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+
+<div class="gate" id="gate" hidden>
+  <form class="gate__card" id="loginForm">
+    <h1 class="gate__t">码表核对</h1>
+    <p class="gate__d">用任务管理平台的账号登录</p>
+    <label class="field">
+      <span class="field__label">账号</span>
+      <input class="input" id="loginAccount" autocomplete="username" />
+    </label>
+    <label class="field">
+      <span class="field__label">密码</span>
+      <input class="input" id="loginPwd" type="password" autocomplete="current-password" />
+    </label>
+    <p class="gate__err" id="loginErr" role="alert" hidden></p>
+    <button class="btn btn--primary gate__btn" type="submit" id="btnLogin">登录</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="topbar">
+    <span class="brand">码表核对</span>
+    <nav class="nav" aria-label="主视图">
+      <button class="nav__item" type="button" data-view="home" aria-current="page">导航</button>
+      <button class="nav__item" type="button" data-view="recon">核对</button>
+      <button class="nav__item" type="button" data-view="overview">全链</button>
+      <button class="nav__item" type="button" data-view="settings">设置</button>
+    </nav>
+    <div class="who" id="who" hidden>
+      <span class="who__name" id="whoName">-</span>
+      <button class="btn btn--sm btn--quiet" type="button" id="btnLogout">退出</button>
+    </div>
+  </header>
+
+  <div class="ctx">
+    <span class="ctx__label">门店</span>
+    <div class="pick">
+      <button class="pick__btn" type="button" id="shopBtn"
+              aria-haspopup="listbox" aria-expanded="false" aria-label="选择门店">
+        <span class="pick__val" id="shopVal">读取中</span>
+        <svg class="pick__chev" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <ul class="pick__pop" id="shopPop" role="listbox" tabindex="-1" hidden></ul>
+    </div>
+
+    <span class="ctx__label">日期</span>
+    <div class="pick">
+      <button class="pick__btn" type="button" id="dayBtn"
+              aria-haspopup="dialog" aria-expanded="false" aria-label="选择日期">
+        <span class="pick__val mono" id="dayVal">-</span>
+        <svg class="pick__chev" viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 8.5h13M7 3v3M13 3v3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <div class="dp__pop" id="dayPop" hidden></div>
+    </div>
+
+    <p class="conn" id="conn" role="status">
+      <span class="conn__dot" aria-hidden="true"></span>
+      <span id="connText">检查中</span>
+    </p>
+  </div>
+
+  <main class="main" id="main">
+    <!-- ============ 扫码填写 ============ -->
+    <section class="pane" id="view-scan" hidden>
+      <button class="btn btn--quiet" type="button" id="btnScanBack">返回列表</button>
+      <div id="scanBody"></div>
+    </section>
+
+    <!-- ============ 导航 ============ -->
+    <section class="pane" id="view-home" hidden>
+      <div class="pane__head">
+        <p class="eyebrow">导航</p>
+        <h1 class="h1">选择机台</h1>
+        <p class="lede">推币机和弹珠机分开抄，码表不混在一起。</p>
+      </div>
+      <div class="kinds" id="kindList"></div>
+    </section>
+
+    <!-- ============ 录入 ============ -->
+    <section class="pane" id="view-entry">
+      <div class="pane__head">
+        <p class="eyebrow">录入</p>
+        <h1 class="h1">抄码表</h1>
+        <p class="lede" id="entryLede">只填机器上显示的累计读数，上币下币自动取。</p>
+        <div class="meter" id="entryProgress" hidden>
+          <div class="meter__row">
+            <span class="meter__k" id="progText">已填 0 / 0</span>
+            <span class="meter__hint" id="progHint"></span>
+            <button class="btn btn--sm btn--primary" type="button" id="btnToRecon" hidden>去看核对</button>
+          </div>
+          <div class="meter__ticks" id="progTicks"></div>
+        </div>
+      </div>
+
+      <section class="sheet" id="confirmPanel" hidden>
+        <h2 class="sheet__h">先核对这家店的推币机</h2>
+        <p class="sheet__p">自动拉到的清单。不该核对的取消勾选，确认后进入填写。</p>
+        <ul class="sheet__list" id="confirmList"></ul>
+        <div class="row">
+          <button class="btn btn--primary" type="button" id="btnConfirm">清单没问题，开始填</button>
+          <p class="progress" id="confirmHint"></p>
+        </div>
+      </section>
+
+      <ul class="ledger" id="entryList"></ul>
+
+      <div class="note" id="entryNote" hidden>
+        <svg class="note__icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 18 17H2L10 2.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <div>
+          <p class="note__t" id="noteT">有读数比昨天小</p>
+          <p class="note__d" id="noteD"></p>
+        </div>
+      </div>
+
+      <div class="savebar">
+        <button class="btn btn--primary" type="button" id="btnSave">保存并拉数</button>
+        <p class="savebar__hint" id="saveHint">次日自动出核对结果</p>
+      </div>
+    </section>
+
+    <!-- ============ 核对 ============ -->
+    <section class="pane" id="view-recon" hidden>
+      <div class="pane__head">
+        <p class="eyebrow">核对</p>
+        <h1 class="h1">收币误差</h1>
+        <p class="lede" id="reconLede">卡头收币 减 码表收币</p>
+      </div>
+
+      <div class="card">
+        <div class="figure">
+        <span class="figure__k">误差合计 · 仅正常行</span>
+        <span class="figure__v" id="fDiff">0</span>
+          <span class="figure__meta" id="fMeta">-</span>
+        </div>
+      </div>
+
+      <div class="card card--flush">
+      <table class="tbl">
+        <caption class="sr-only">按机台的收币核对结果</caption>
+        <thead id="reconHead"></thead>
+        <tbody id="reconBody"></tbody>
+      </table>
+      </div>
+
+      <div class="empty" id="reconEmpty" hidden>
+        <p class="empty__t">这一天还没有核对结果</p>
+        <p class="empty__d">先去录入抄码表，或换个日期</p>
+      </div>
+    </section>
+
+    <!-- ============ 全链 ============ -->
+    <section class="pane" id="view-overview" hidden>
+      <div class="pane__head">
+        <p class="eyebrow">全链</p>
+        <h1 class="h1">全链</h1>
+        <p class="lede" id="ovLede">所有门店当天的误差汇总</p>
+      </div>
+
+      <div class="card">
+        <div class="figure">
+        <span class="figure__k">全链误差合计 · 仅正常行</span>
+        <span class="figure__v" id="ovDiff">0</span>
+          <span class="figure__meta" id="ovMeta">-</span>
+        </div>
+      </div>
+
+      <div class="row" style="margin:var(--space-4) 0">
+        <button class="btn" type="button" id="btnFetchAll">拉取全部门店当天数据</button>
+        <p class="progress" id="jobStatus"></p>
+      </div>
+
+      <div class="card card--flush">
+      <table class="tbl">
+        <caption class="sr-only">各门店当天核对汇总</caption>
+        <thead>
+          <tr>
+            <th scope="col">门店</th>
+            <th scope="col" class="num">码表</th>
+            <th scope="col" class="num">可核对</th>
+            <th scope="col" class="num">误差合计</th>
+            <th scope="col" class="num">含异常</th>
+            <th scope="col" class="num">≥1000</th>
+          </tr>
+        </thead>
+        <tbody id="ovBody"></tbody>
+      </table>
+      </div>
+
+      <div class="empty" id="ovEmpty" hidden>
+        <p class="empty__t">还没有门店接入</p>
+        <p class="empty__d">去设置点「从宝点导入门店和机台」</p>
+      </div>
+    </section>
+
+    <!-- ============ 设置 ============ -->
+    <section class="pane" id="view-settings" hidden>
+
+      <div id="shopPane">
+        <div class="pane__head">
+          <p class="eyebrow">设置</p>
+        <h1 class="h1">门店</h1>
+          <p class="lede">门店和机台在这里维护，改完立刻生效。</p>
+        </div>
+        <div class="card card--flush">
+        <table class="tbl">
+          <caption class="sr-only">门店列表</caption>
+          <thead>
+            <tr><th scope="col">门店</th><th scope="col" class="num">码表机台</th><th scope="col">操作</th></tr>
+          </thead>
+          <tbody id="shopBody"></tbody>
+        </table>
+        </div>
+        <div class="row" style="margin-top:var(--space-5)">
+          <button class="btn" type="button" id="btnImportShops">从宝点导入门店和机台</button>
+          <p class="progress" id="importStatus"></p>
+        </div>
+      </div>
+
+      <div id="unitPane" hidden>
+        <button class="btn btn--quiet" type="button" id="btnBackShops">返回门店</button>
+        <div class="pane__head">
+          <h1 class="h1" id="unitTitle">机台</h1>
+          <p class="lede">每台机一个码表。几个卡头共用一块码表时，勾上共用，把它们的通讯ID 都填上。</p>
+        </div>
+        <div class="row" style="margin-bottom:var(--space-4)">
+          <button class="btn" type="button" id="btnQr">打印机台二维码</button>
+          <p class="progress" id="qrHint">贴到机台上，扫码直达这一台</p>
+        </div>
+
+        <p class="sr-only" id="machineLive" aria-live="polite"></p>
+        <div id="unitList"></div>
+
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="ui.js?v=31"></script>
+<script src="app.js?v=31"></script>
+</body>
+</html>

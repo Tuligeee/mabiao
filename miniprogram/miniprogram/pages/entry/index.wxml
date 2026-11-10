@@ -1,0 +1,54 @@
+<view class="wrap">
+  <view class="ctx">
+    <view class="ctx__field">
+      <text class="ctx__label">门店</text>
+      <text class="ctx__value">{{shopName}}</text>
+    </view>
+    <view class="ctx__field">
+      <text class="ctx__label">日期</text>
+      <picker mode="date" value="{{day}}" end="{{maxDay}}" bindchange="onDayChange">
+        <view class="ctx__picker">{{day}}</view>
+      </picker>
+    </view>
+    <text class="ctx__src">{{sourceLabel}}</text>
+  </view>
+
+  <text class="hint">只填机器上显示的累计读数，上币/下币自动从宝点取。</text>
+
+  <view wx:if="{{cloudErr}}" class="banner banner--err">
+    <text class="banner__t">{{cloudErr}}</text>
+    <text class="banner__d">开发者工具右上角「云开发」→ 开通 → 新建环境；开通后到「我的店」点「初始化云数据」。现在显示的是演示数据。</text>
+  </view>
+
+  <view wx:for="{{rows}}" wx:key="unit_id" class="unit {{item.warn ? 'unit--warn' : ''}}">
+    <view class="unit__head">
+      <text class="unit__name">{{item.name}}</text>
+      <text class="unit__meta">{{item.meta}}</text>
+    </view>
+    <text class="unit__prev">昨日 {{item.prevText}}</text>
+    <view class="unit__grid">
+      <view class="cell">
+        <text class="cell__k">今日入币</text>
+        <input class="cell__input" type="digit" value="{{item.in_r}}" data-i="{{index}}" data-f="in_r" bindinput="onInput" placeholder="-" />
+        <text class="cell__delta {{item.dIn < 0 ? 'cell__delta--neg' : ''}}">{{item.dInText}}</text>
+      </view>
+      <view class="cell">
+        <text class="cell__k">今日出币</text>
+        <input class="cell__input" type="digit" value="{{item.out_r}}" data-i="{{index}}" data-f="out_r" bindinput="onInput" placeholder="-" />
+        <text class="cell__delta {{item.dOut < 0 ? 'cell__delta--neg' : ''}}">{{item.dOutText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{rows.length === 0}}" class="empty">这一天没有机台清单。</view>
+
+  <view wx:if="{{warnCount > 0}}" class="banner">
+    <text class="banner__t">有 {{warnCount}} 个读数比昨天小</text>
+    <text class="banner__d">可能是抄错，也可能换表/清账。保存后在「核对」里会标成待确认。</text>
+  </view>
+
+  <view class="bar">
+    <button class="btn" loading="{{saving}}" disabled="{{saving}}" bindtap="onSave">保存</button>
+    <text class="bar__hint">{{hint || '次日自动出核对结果'}}</text>
+  </view>
+</view>

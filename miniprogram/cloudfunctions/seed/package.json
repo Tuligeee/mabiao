@@ -1,0 +1,9 @@
+{
+  "name": "seed",
+  "version": "1.0.0",
+  "description": "一次性把演示数据灌进云数据库",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

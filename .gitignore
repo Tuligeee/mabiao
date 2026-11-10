@@ -1,0 +1,29 @@
+# 数据库和备份（数据只在服务器上，本地这份是开发用）
+app/data/*.db
+app/data/*.db.bak-*
+app/data/*.db-wal
+app/data/*.db-shm
+app/data/*.log
+app/data/_deploy.db
+
+# 抓包和探针产物
+_probe/
+
+# Excel 和生成物
+*.xlsx
+*.har
+
+# 早期分析脚本的中间产物
+/*.txt
+/debug.log
+/_last_output.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

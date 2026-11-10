@@ -1,0 +1,28 @@
+<view class="wrap">
+  <view class="panel">
+    <text class="panel__h">{{shopName}}</text>
+    <view class="kv"><text class="kv__k">码表单元</text><text class="kv__v">{{unitCount}} 个</text></view>
+    <view class="kv"><text class="kv__k">通讯ID</text><text class="kv__v">{{commCount}} 个</text></view>
+    <view class="kv"><text class="kv__k">数据来源</text><text class="kv__v">{{sourceLabel}}</text></view>
+  </view>
+
+  <view class="panel" wx:if="{{cloudMode}}">
+    <text class="panel__h">云数据初始化</text>
+    <text class="panel__p">第一次用云环境时点一次：建集合 + 写入机台清单和最近 7 天快照。重复点只会覆盖，不会重复插入。</text>
+    <button class="btn" style="margin-top:16px" loading="{{seeding}}" disabled="{{seeding}}" bindtap="onSeed">初始化云数据</button>
+    <text class="bar__hint">{{seedMsg}}</text>
+  </view>
+
+  <view class="panel">
+    <text class="panel__h">机台清单</text>
+    <view wx:for="{{units}}" wx:key="id" class="kv">
+      <text class="kv__k">{{item.name}}</text>
+      <text class="kv__v">{{item.meta}}</text>
+    </view>
+  </view>
+
+  <view class="panel">
+    <text class="panel__h">说明</text>
+    <text class="panel__p">这里只填当天的码表读数。上币（机台消费币汇总）和下币（机台获分记录）由服务器每天从宝点拉取，次日自动出核对结果。</text>
+  </view>
+</view>

@@ -1,0 +1,1575 @@
+{
+ "shop": {
+  "id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+  "name": "纯玩世界鄂州吾悦店"
+ },
+ "units": [
+  {
+   "_id": "u1",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 1,
+   "name": "凤凰城",
+   "team": "屏幕机",
+   "shared": true,
+   "comms": [
+    "758516",
+    "759109",
+    "733895",
+    "733720"
+   ]
+  },
+  {
+   "_id": "u2",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 2,
+   "name": "可乐风暴 733586",
+   "team": "连排推币机",
+   "shared": false,
+   "comms": [
+    "733586"
+   ]
+  },
+  {
+   "_id": "u3",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 3,
+   "name": "可乐风暴 733670",
+   "team": "连排推币机",
+   "shared": false,
+   "comms": [
+    "733670"
+   ]
+  },
+  {
+   "_id": "u4",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 4,
+   "name": "可乐风暴 733672",
+   "team": "连排推币机",
+   "shared": false,
+   "comms": [
+    "733672"
+   ]
+  },
+  {
+   "_id": "u5",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 5,
+   "name": "可乐风暴 733676",
+   "team": "连排推币机",
+   "shared": false,
+   "comms": [
+    "733676"
+   ]
+  },
+  {
+   "_id": "u6",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 6,
+   "name": "法老也疯狂",
+   "team": "屏幕机",
+   "shared": true,
+   "comms": [
+    "733578",
+    "733592",
+    "733651",
+    "733573"
+   ]
+  },
+  {
+   "_id": "u7",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 7,
+   "name": "碧海传说 733577",
+   "team": "中岛推币类",
+   "shared": false,
+   "comms": [
+    "733577"
+   ]
+  },
+  {
+   "_id": "u8",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 8,
+   "name": "碧海传说 733581",
+   "team": "中岛推币类",
+   "shared": false,
+   "comms": [
+    "733581"
+   ]
+  },
+  {
+   "_id": "u9",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 9,
+   "name": "碧海传说 733599",
+   "team": "中岛推币类",
+   "shared": false,
+   "comms": [
+    "733599"
+   ]
+  },
+  {
+   "_id": "u10",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "unit_id": 10,
+   "name": "碧海传说 733622",
+   "team": "中岛推币类",
+   "shared": false,
+   "comms": [
+    "733622"
+   ]
+  }
+ ],
+ "snapshots": [
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-01",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-01",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 203000.0,
+     "prev_out": 198394.0,
+     "in_r": 277000.0,
+     "out_r": 276967.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 788826.0,
+     "prev_out": 603598.0,
+     "in_r": 800326.0,
+     "out_r": 608315.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 869447.0,
+     "prev_out": 650485.0,
+     "in_r": 876847.0,
+     "out_r": 659413.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 893927.0,
+     "prev_out": 676648.0,
+     "in_r": 904926.0,
+     "out_r": 681618.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 998826.0,
+     "prev_out": 760283.0,
+     "in_r": 1006026.0,
+     "out_r": 768147.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 169500.0,
+     "prev_out": 174270.0,
+     "in_r": 285800.0,
+     "out_r": 277862.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 411090.0,
+     "prev_out": 364777.0,
+     "in_r": 417240.0,
+     "out_r": 370431.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 363633.0,
+     "prev_out": 318433.0,
+     "in_r": 369083.0,
+     "out_r": 322390.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 399726.0,
+     "prev_out": 351411.0,
+     "in_r": 410326.0,
+     "out_r": 361702.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 378500.0,
+     "prev_out": 330889.0,
+     "in_r": 381700.0,
+     "out_r": 335666.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -4573.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 6783.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1528.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 6029.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -664.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 12708.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 496.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1493.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 309.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1577.0,
+     "diff": null,
+     "status": "缺卡头"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 0,
+    "diff_all": 0,
+    "diff_ok": 0,
+    "warn": 10,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-02",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-02",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 277000.0,
+     "prev_out": 276967.0,
+     "in_r": 328000.0,
+     "out_r": 326578.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 800326.0,
+     "prev_out": 608315.0,
+     "in_r": 807726.0,
+     "out_r": 612911.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 876847.0,
+     "prev_out": 659413.0,
+     "in_r": 880797.0,
+     "out_r": 663552.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 904926.0,
+     "prev_out": 681618.0,
+     "in_r": 909426.0,
+     "out_r": 686421.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1006026.0,
+     "prev_out": 768147.0,
+     "in_r": 1009776.0,
+     "out_r": 771541.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 285800.0,
+     "prev_out": 277862.0,
+     "in_r": 341800.0,
+     "out_r": 334681.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 417240.0,
+     "prev_out": 370431.0,
+     "in_r": 423590.0,
+     "out_r": 376761.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 369083.0,
+     "prev_out": 322390.0,
+     "in_r": 374133.0,
+     "out_r": 326865.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 410326.0,
+     "prev_out": 361702.0,
+     "in_r": 418426.0,
+     "out_r": 364461.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 381700.0,
+     "prev_out": 335666.0,
+     "in_r": 385350.0,
+     "out_r": 337243.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1389.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 2804.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -189.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -303.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 356.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -819.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 20.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 575.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 5341.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 2073.0,
+     "diff": null,
+     "status": "缺卡头"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 0,
+    "diff_all": 0,
+    "diff_ok": 0,
+    "warn": 10,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-03",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-03",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 328000.0,
+     "prev_out": 326578.0,
+     "in_r": 396100.0,
+     "out_r": 372924.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 807726.0,
+     "prev_out": 612911.0,
+     "in_r": 810376.0,
+     "out_r": 616603.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 880797.0,
+     "prev_out": 663552.0,
+     "in_r": 891847.0,
+     "out_r": 667732.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 909426.0,
+     "prev_out": 686421.0,
+     "in_r": 912376.0,
+     "out_r": 690555.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1009776.0,
+     "prev_out": 771541.0,
+     "in_r": 1011226.0,
+     "out_r": 777353.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 341800.0,
+     "prev_out": 334681.0,
+     "in_r": null,
+     "out_r": null
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 423590.0,
+     "prev_out": 376761.0,
+     "in_r": 429990.0,
+     "out_r": 382824.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 374133.0,
+     "prev_out": 326865.0,
+     "in_r": 377733.0,
+     "out_r": 330291.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 418426.0,
+     "prev_out": 364461.0,
+     "in_r": 423076.0,
+     "out_r": 372160.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 385350.0,
+     "prev_out": 337243.0,
+     "in_r": 388150.0,
+     "out_r": 341385.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 21754.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1042.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 6870.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1184.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -4362.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": null,
+     "diff": null,
+     "status": "缺码表"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 337.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 174.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -3049.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1342.0,
+     "diff": null,
+     "status": "缺卡头"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 0,
+    "diff_all": 0,
+    "diff_ok": 0,
+    "warn": 10,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-04",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-04",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 396100.0,
+     "prev_out": 372924.0,
+     "in_r": 480000.0,
+     "out_r": 453377.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 810376.0,
+     "prev_out": 616603.0,
+     "in_r": 816876.0,
+     "out_r": 622459.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 891847.0,
+     "prev_out": 667732.0,
+     "in_r": 899647.0,
+     "out_r": 672119.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 912376.0,
+     "prev_out": 690555.0,
+     "in_r": 920076.0,
+     "out_r": 698980.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1011226.0,
+     "prev_out": 777353.0,
+     "in_r": 1021026.0,
+     "out_r": 780675.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 341800.0,
+     "prev_out": 334681.0,
+     "in_r": 379900.0,
+     "out_r": 377136.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 429990.0,
+     "prev_out": 382824.0,
+     "in_r": 438140.0,
+     "out_r": 389642.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 377733.0,
+     "prev_out": 330291.0,
+     "in_r": 380233.0,
+     "out_r": 332787.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 423076.0,
+     "prev_out": 372160.0,
+     "in_r": 430976.0,
+     "out_r": 377866.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 388150.0,
+     "prev_out": 341385.0,
+     "in_r": 394150.0,
+     "out_r": 347718.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 3447.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 644.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 3413.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -725.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 6478.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -4355.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1332.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 4.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 2194.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -333.0,
+     "diff": null,
+     "status": "缺卡头"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 0,
+    "diff_all": 0,
+    "diff_ok": 0,
+    "warn": 10,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-05",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-05",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 480000.0,
+     "prev_out": 453377.0,
+     "in_r": 518700.0,
+     "out_r": 493280.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 816876.0,
+     "prev_out": 622459.0,
+     "in_r": 818626.0,
+     "out_r": 624847.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 899647.0,
+     "prev_out": 672119.0,
+     "in_r": 901897.0,
+     "out_r": 673324.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 920076.0,
+     "prev_out": 698980.0,
+     "in_r": 923026.0,
+     "out_r": 702573.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1021026.0,
+     "prev_out": 780675.0,
+     "in_r": 1028226.0,
+     "out_r": 786158.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 379900.0,
+     "prev_out": 377136.0,
+     "in_r": 392900.0,
+     "out_r": 386315.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 438140.0,
+     "prev_out": 389642.0,
+     "in_r": 442240.0,
+     "out_r": 392634.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 380233.0,
+     "prev_out": 332787.0,
+     "in_r": null,
+     "out_r": null
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 430976.0,
+     "prev_out": 377866.0,
+     "in_r": 433676.0,
+     "out_r": 381558.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 394150.0,
+     "prev_out": 347718.0,
+     "in_r": 395050.0,
+     "out_r": 348672.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -1203.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -638.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1045.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -643.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1717.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 3821.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": 1108.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": null,
+     "diff": null,
+     "status": "缺码表"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -992.0,
+     "diff": null,
+     "status": "缺卡头"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": null,
+     "down": null,
+     "head": null,
+     "meter": -54.0,
+     "diff": null,
+     "status": "缺卡头"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 0,
+    "diff_all": 0,
+    "diff_ok": 0,
+    "warn": 10,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-06",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-06",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 518700.0,
+     "prev_out": 493280.0,
+     "in_r": 625501.0,
+     "out_r": 588320.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 818626.0,
+     "prev_out": 624847.0,
+     "in_r": 825876.0,
+     "out_r": 628712.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 901897.0,
+     "prev_out": 673324.0,
+     "in_r": 903897.0,
+     "out_r": 676524.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 923026.0,
+     "prev_out": 702573.0,
+     "in_r": 931226.0,
+     "out_r": 704886.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1028226.0,
+     "prev_out": 786158.0,
+     "in_r": 1030226.0,
+     "out_r": 790222.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 392900.0,
+     "prev_out": 386315.0,
+     "in_r": 439400.0,
+     "out_r": 432495.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 442240.0,
+     "prev_out": 392634.0,
+     "in_r": 445440.0,
+     "out_r": 396424.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 380233.0,
+     "prev_out": 332787.0,
+     "in_r": 381283.0,
+     "out_r": 333695.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 433676.0,
+     "prev_out": 381558.0,
+     "in_r": 434076.0,
+     "out_r": 381703.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 395050.0,
+     "prev_out": 348672.0,
+     "in_r": 398000.0,
+     "out_r": 352347.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": 106800.0,
+     "down": 95040.0,
+     "head": 11760.0,
+     "meter": 11761.0,
+     "diff": -1.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": 7250.0,
+     "down": 3865.0,
+     "head": 3385.0,
+     "meter": 3385.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": 2000.0,
+     "down": 3200.0,
+     "head": -1200.0,
+     "meter": -1200.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": 8200.0,
+     "down": 2313.0,
+     "head": 5887.0,
+     "meter": 5887.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": 2000.0,
+     "down": 4064.0,
+     "head": -2064.0,
+     "meter": -2064.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": 46700.0,
+     "down": 46180.0,
+     "head": 520.0,
+     "meter": 320.0,
+     "diff": 200.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": 3200.0,
+     "down": 3790.0,
+     "head": -590.0,
+     "meter": -590.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": 1050.0,
+     "down": 908.0,
+     "head": 142.0,
+     "meter": 142.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": 400.0,
+     "down": 145.0,
+     "head": 255.0,
+     "meter": 255.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": 2950.0,
+     "down": 3675.0,
+     "head": -725.0,
+     "meter": -725.0,
+     "diff": 0.0,
+     "status": "正常"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 10,
+    "diff_all": 199.0,
+    "diff_ok": 199.0,
+    "warn": 0,
+    "big": 0
+   }
+  },
+  {
+   "_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858_2026-11-07",
+   "shop_id": "3be437fd-d035-4bd8-bb71-15ff31c9c858",
+   "day": "2026-11-07",
+   "rows": [
+    {
+     "unit_id": 1,
+     "name": "凤凰城",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 625501.0,
+     "prev_out": 588320.0,
+     "in_r": 708901.0,
+     "out_r": 676122.0
+    },
+    {
+     "unit_id": 2,
+     "name": "可乐风暴 733586",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 825876.0,
+     "prev_out": 628712.0,
+     "in_r": 835876.0,
+     "out_r": 637182.0
+    },
+    {
+     "unit_id": 3,
+     "name": "可乐风暴 733670",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 903897.0,
+     "prev_out": 676524.0,
+     "in_r": 908947.0,
+     "out_r": 679786.0
+    },
+    {
+     "unit_id": 4,
+     "name": "可乐风暴 733672",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 931226.0,
+     "prev_out": 704886.0,
+     "in_r": 938126.0,
+     "out_r": 711029.0
+    },
+    {
+     "unit_id": 5,
+     "name": "可乐风暴 733676",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 1030226.0,
+     "prev_out": 790222.0,
+     "in_r": 1041826.0,
+     "out_r": 800053.0
+    },
+    {
+     "unit_id": 6,
+     "name": "法老也疯狂",
+     "shared": true,
+     "comm_count": 4,
+     "prev_in": 439400.0,
+     "prev_out": 432495.0,
+     "in_r": 501000.0,
+     "out_r": 491923.0
+    },
+    {
+     "unit_id": 7,
+     "name": "碧海传说 733577",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 445440.0,
+     "prev_out": 396424.0,
+     "in_r": 452540.0,
+     "out_r": 404378.0
+    },
+    {
+     "unit_id": 8,
+     "name": "碧海传说 733581",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 381283.0,
+     "prev_out": 333695.0,
+     "in_r": 387283.0,
+     "out_r": 337317.0
+    },
+    {
+     "unit_id": 9,
+     "name": "碧海传说 733599",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 434076.0,
+     "prev_out": 381703.0,
+     "in_r": 444576.0,
+     "out_r": 388095.0
+    },
+    {
+     "unit_id": 10,
+     "name": "碧海传说 733622",
+     "shared": false,
+     "comm_count": 1,
+     "prev_in": 398000.0,
+     "prev_out": 352347.0,
+     "in_r": 408800.0,
+     "out_r": 360876.0
+    }
+   ],
+   "recon": [
+    {
+     "name": "凤凰城",
+     "up": 83400.0,
+     "down": 87802.0,
+     "head": -4402.0,
+     "meter": -4402.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733586",
+     "up": 10000.0,
+     "down": 8470.0,
+     "head": 1530.0,
+     "meter": 1530.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733670",
+     "up": 5050.0,
+     "down": 3262.0,
+     "head": 1788.0,
+     "meter": 1788.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733672",
+     "up": 6900.0,
+     "down": 6143.0,
+     "head": 757.0,
+     "meter": 757.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "可乐风暴 733676",
+     "up": 11600.0,
+     "down": 9831.0,
+     "head": 1769.0,
+     "meter": 1769.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "法老也疯狂",
+     "up": 61600.0,
+     "down": 59428.0,
+     "head": 2172.0,
+     "meter": 2172.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733577",
+     "up": 7100.0,
+     "down": 7954.0,
+     "head": -854.0,
+     "meter": -854.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733581",
+     "up": 6000.0,
+     "down": 3622.0,
+     "head": 2378.0,
+     "meter": 2378.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733599",
+     "up": 10500.0,
+     "down": 6392.0,
+     "head": 4108.0,
+     "meter": 4108.0,
+     "diff": 0.0,
+     "status": "正常"
+    },
+    {
+     "name": "碧海传说 733622",
+     "up": 10800.0,
+     "down": 8529.0,
+     "head": 2271.0,
+     "meter": 2271.0,
+     "diff": 0.0,
+     "status": "正常"
+    }
+   ],
+   "summary": {
+    "total": 10,
+    "ok": 10,
+    "diff_all": 0.0,
+    "diff_ok": 0.0,
+    "warn": 0,
+    "big": 0
+   }
+  }
+ ]
+}

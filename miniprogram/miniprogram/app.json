@@ -1,0 +1,37 @@
+{
+  "pages": [
+    "pages/entry/index",
+    "pages/recon/index",
+    "pages/mine/index"
+  ],
+  "window": {
+    "backgroundColor": "#F9FAFB",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTitleText": "码表核对",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "color": "#4B5563",
+    "selectedColor": "#2563EB",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/entry/index",
+        "text": "录入"
+      },
+      {
+        "pagePath": "pages/recon/index",
+        "text": "核对"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的店"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

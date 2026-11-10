@@ -1,0 +1,49 @@
+<view class="wrap">
+  <view class="ctx">
+    <view class="ctx__field">
+      <text class="ctx__label">门店</text>
+      <text class="ctx__value">{{shopName}}</text>
+    </view>
+    <view class="ctx__field">
+      <text class="ctx__label">日期</text>
+      <picker mode="date" value="{{day}}" end="{{maxDay}}" bindchange="onDayChange">
+        <view class="ctx__picker">{{day}}</view>
+      </picker>
+    </view>
+    <text class="ctx__src">{{sourceLabel}}</text>
+  </view>
+
+  <view class="band">
+    <view class="band__cell">
+      <text class="band__k">可核对</text>
+      <text class="band__v">{{summary.ok}}</text>
+      <text class="band__u">台</text>
+    </view>
+    <view class="band__cell">
+      <text class="band__k">误差合计</text>
+      <text class="band__v band__v--lead">{{diffOk}}</text>
+      <text class="band__u">仅正常行</text>
+    </view>
+    <view class="band__cell">
+      <text class="band__k">含异常合计</text>
+      <text class="band__v">{{diffAll}}</text>
+      <text class="band__u">全部行</text>
+    </view>
+    <view class="band__cell">
+      <text class="band__k">误差 ≥1000</text>
+      <text class="band__v">{{summary.big}}</text>
+      <text class="band__u">台</text>
+    </view>
+  </view>
+
+  <view wx:for="{{rows}}" wx:key="name" class="row">
+    <view class="row__main">
+      <text class="row__name">{{item.name}}</text>
+      <text class="row__nums">上币 {{item.upText}} · 下币 {{item.downText}} · 码表收币 {{item.meterText}}</text>
+    </view>
+    <text class="row__diff {{item.bad ? 'row__diff--bad' : ''}}">{{item.diffText}}</text>
+    <text class="tag {{item.tone}}">{{item.status}}</text>
+  </view>
+
+  <view wx:if="{{rows.length === 0}}" class="empty">这一天还没有核对结果。</view>
+</view>
