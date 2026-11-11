@@ -1,0 +1,7 @@
+[Unit]
+Description=Meter check · HTTPS cert watch (码表核对证书监控)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/meter/bin/cert_watch.py

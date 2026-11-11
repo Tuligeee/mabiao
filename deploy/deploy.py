@@ -20,6 +20,7 @@ import paramiko
 
 CFG_PATH = r"C:\Users\Tuilge\Desktop\自动化合集\日报自动化\.server_ssh.json"
 APP = r"C:\Users\Tuilge\Desktop\码表线上化\app"
+REPO_ROOT = r"C:\Users\Tuilge\Desktop\码表线上化"
 REMOTE = "/opt/meter"
 
 # 只传这些，数据库不在里面
@@ -27,6 +28,12 @@ FILES = [
     "server.py", "index.html", "app.js", "app.css",
     "ui.js", "theme.css", "tokens.css", "machine_type_map.json",
     "vendor/jsQR.js",
+]
+
+# 不在 app 目录里的，单独映射：本地路径 -> 远端路径
+EXTRA = [
+    (os.path.join(r"C:\Users\Tuilge\Desktop\码表线上化", "deploy", "cert_watch.py"),
+     "%s/bin/cert_watch.py" % REMOTE),
 ]
 
 
@@ -41,7 +48,7 @@ def main():
         _i, o, e = c.exec_command(cmd, timeout=t)
         return (o.read() + e.read()).decode("utf-8", "replace").strip()
 
-    run("mkdir -p %s/data" % REMOTE)
+    run("mkdir -p %s/data %s/vendor %s/bin" % (REMOTE, REMOTE, REMOTE))
 
     # 1) 备份服务器库
     ts = time.strftime("%Y%m%d-%H%M%S")
@@ -54,6 +61,8 @@ def main():
     run("mkdir -p %s/vendor" % REMOTE)
     for f in FILES:
         sftp.put(os.path.join(APP, f.replace("/", os.sep)), "%s/%s" % (REMOTE, f))
+    for local_p, remote_p in EXTRA:
+        sftp.put(local_p, remote_p)
     # 3) 只有服务器没库（或显式 --init-db）才传本地快照
     exists = run("[ -f {0}/data/meter.db ] && echo yes || echo no".format(REMOTE))
     if init_db or exists == "no":
@@ -71,7 +80,18 @@ def main():
         print("服务器库已存在，保持不动")
     sftp.close()
 
-    # 4) 重启
+    # 4) 证书监控：单元文件 + 定时器
+    for unit in ("cert-watch.service", "cert-watch.timer"):
+        src_u = os.path.join(REPO_ROOT, "deploy", unit)
+        if os.path.exists(src_u):
+            sftp = c.open_sftp()
+            with sftp.open("/etc/systemd/system/" + unit, "w") as f:
+                f.write(io.open(src_u, encoding="utf-8").read())
+            sftp.close()
+    print(run("systemctl daemon-reload && systemctl enable --now cert-watch.timer "
+              "> /dev/null 2>&1; systemctl is-active cert-watch.timer"))
+
+    # 5) 重启服务
     print(run("systemctl restart meter && sleep 2 && systemctl is-active meter"))
     print(run("curl -s -o /dev/null -w 'page %{http_code}\\n' http://127.0.0.1/meter/"))
     print(run("ls -lh %s/data/meter.db* | tail -3" % REMOTE))

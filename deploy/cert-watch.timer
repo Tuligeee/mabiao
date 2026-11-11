@@ -1,0 +1,10 @@
+[Unit]
+Description=Run cert watch twice a day (码表核对证书监控)
+
+[Timer]
+# 早上 9 点、晚上 9 点各查一次。证书剩 1.5 天就告警，留出处理时间。
+OnCalendar=*-*-* 09,21:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
