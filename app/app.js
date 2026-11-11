@@ -108,6 +108,108 @@ function welcomeDialog(b) {
   });
 }
 
+/* ------------------------------------------------------------ 扫码 */
+let scanStream = null;
+let scanRaf = 0;
+
+function cameraOk() {
+  return !!(window.isSecureContext && navigator.mediaDevices
+    && navigator.mediaDevices.getUserMedia);
+}
+
+async function openScanner() {
+  $('scanner').hidden = false;
+  document.body.dataset.scanning = '1';
+
+  if (!cameraOk()) {
+    $('scanHint').textContent = '当前是 HTTP，浏览器不给摄像头，改用拍照识别';
+    $('scanFile').click();
+    return;
+  }
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }, audio: false,
+    });
+    const v = $('scanVideo');
+    v.srcObject = scanStream;
+    await v.play();
+    $('scanHint').textContent = '对准机台上的二维码';
+    tickScan();
+  } catch (e) {
+    $('scanHint').textContent = e.name === 'NotAllowedError'
+      ? '摄像头权限被拒绝，去浏览器设置里允许' : ('打不开摄像头：' + e.message);
+  }
+}
+
+function stopScanner() {
+  cancelAnimationFrame(scanRaf);
+  if (scanStream) {
+    scanStream.getTracks().forEach((t) => t.stop());
+    scanStream = null;
+  }
+  const v = $('scanVideo');
+  if (v) v.srcObject = null;
+  $('scanner').hidden = true;
+  delete document.body.dataset.scanning;
+}
+
+function tickScan() {
+  const v = $('scanVideo');
+  if (!v || !scanStream) return;
+  if (v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth) {
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth;
+    cv.height = v.videoHeight;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(v, 0, 0);
+    const img = ctx.getImageData(0, 0, cv.width, cv.height);
+    const res = window.jsQR
+      && window.jsQR(img.data, cv.width, cv.height, { inversionAttempts: 'dontInvert' });
+    if (res && res.data) { onScanResult(res.data); return; }
+  }
+  scanRaf = requestAnimationFrame(tickScan);
+}
+
+function codeFromScan(text) {
+  try {
+    const u = new URL(text, location.origin);
+    const c = u.searchParams.get('c');
+    const id = u.searchParams.get('u');
+    if (c) return { code: c };
+    if (id) return { id };
+  } catch (e) { /* 不是 URL，往下当编号 */ }
+  const t = String(text || '').trim();
+  return /^[A-Za-z0-9_-]{2,20}$/.test(t) ? { code: t } : null;
+}
+
+function onScanResult(text) {
+  const hit = codeFromScan(text);
+  stopScanner();
+  if (!hit) { toast('这个码不是机台码', 'bad'); return; }
+  location.href = hit.code
+    ? BASE + '?c=' + encodeURIComponent(hit.code)
+    : BASE + '?u=' + encodeURIComponent(hit.id);
+}
+
+function scanPhoto(file) {
+  if (!file) { stopScanner(); return; }
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = img.width;
+    cv.height = img.height;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, cv.width, cv.height);
+    const res = window.jsQR && window.jsQR(data.data, cv.width, cv.height);
+    URL.revokeObjectURL(img.src);
+    if (res && res.data) onScanResult(res.data);
+    else { stopScanner(); toast('没认出二维码，靠近点重拍一张', 'bad'); }
+  };
+  img.onerror = () => { stopScanner(); toast('这张图读不了', 'bad'); };
+  img.src = URL.createObjectURL(file);
+}
+
 /* ------------------------------------------------------------ 扫码填写 */
 async function loadScan(code, id) {
   const qs = code ? ('c=' + encodeURIComponent(code)) : ('id=' + encodeURIComponent(id));
@@ -1224,6 +1326,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnImportShops').addEventListener('click', importShops);
   $('btnBackShops').addEventListener('click', loadSettings);
   $('btnScanBack').addEventListener('click', () => { location.href = BASE; });
+  $('btnScan').addEventListener('click', openScanner);
+  $('scanClose').addEventListener('click', stopScanner);
+  $('scanFile').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    scanPhoto(f);
+  });
   $('btnQr').addEventListener('click', () => {
     window.open(BASE + 'qr?shop_id=' + encodeURIComponent(MSHOP.id), '_blank');
   });

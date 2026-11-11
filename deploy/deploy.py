@@ -26,6 +26,7 @@ REMOTE = "/opt/meter"
 FILES = [
     "server.py", "index.html", "app.js", "app.css",
     "ui.js", "theme.css", "tokens.css", "machine_type_map.json",
+    "vendor/jsQR.js",
 ]
 
 
@@ -50,8 +51,9 @@ def main():
 
     # 2) 传代码
     sftp = c.open_sftp()
+    run("mkdir -p %s/vendor" % REMOTE)
     for f in FILES:
-        sftp.put(os.path.join(APP, f), "%s/%s" % (REMOTE, f))
+        sftp.put(os.path.join(APP, f.replace("/", os.sep)), "%s/%s" % (REMOTE, f))
     # 3) 只有服务器没库（或显式 --init-db）才传本地快照
     exists = run("[ -f {0}/data/meter.db ] && echo yes || echo no".format(REMOTE))
     if init_db or exists == "no":

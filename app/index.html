@@ -4,11 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
-<link rel="stylesheet" href="theme.css?v=31">
-<link rel="stylesheet" href="app.css?v=31">
+<link rel="stylesheet" href="theme.css?v=33">
+<link rel="stylesheet" href="app.css?v=33">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
+
+<div class="scanner" id="scanner" hidden>
+  <video class="scanner__video" id="scanVideo" playsinline muted></video>
+  <div class="scanner__mask" aria-hidden="true"><div class="scanner__box"></div></div>
+  <div class="scanner__bar">
+    <p class="scanner__hint" id="scanHint">对准机台上的二维码</p>
+    <button class="btn btn--quiet" type="button" id="scanClose">关闭</button>
+  </div>
+  <input type="file" id="scanFile" accept="image/*" capture="environment" hidden />
+</div>
 
 <div class="gate" id="gate" hidden>
   <form class="gate__card" id="loginForm">
@@ -83,6 +93,11 @@
         <h1 class="h1">选择机台</h1>
         <p class="lede">推币机和弹珠机分开抄，码表不混在一起。</p>
       </div>
+      <button class="scan-cta" type="button" id="btnScan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6a2 2 0 012-2h3M20 9V6a2 2 0 00-2-2h-3M4 15v3a2 2 0 002 2h3M20 15v3a2 2 0 01-2 2h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 12h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>扫码填数</span>
+        <small>对准机台上的二维码</small>
+      </button>
       <div class="kinds" id="kindList"></div>
     </section>
 
@@ -245,7 +260,8 @@
   </main>
 </div>
 
-<script src="ui.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="vendor/jsQR.js"></script>
+  <script src="ui.js?v=33"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>
