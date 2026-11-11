@@ -104,6 +104,19 @@ def send_dm(title, text):
     return False
 
 
+def try_renew(dry=False):
+    """自己先续一次。返回 (成功?, 输出尾部)。"""
+    cmd = ["certbot", "renew", "--cert-name", "mabiao-ip", "--force-renewal", "--non-interactive"]
+    if dry:
+        cmd.append("--dry-run")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
+    except Exception as e:
+        return False, "执行失败: %s" % e
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    return r.returncode == 0, out[-600:]
+
+
 def cert_expiry():
     """返回 (到期时间 UTC, 剩余天数)。读不到返回 (None, None)。"""
     try:
@@ -157,8 +170,32 @@ def main():
     threshold = float(conf.get("threshold_days", DEFAULT_THRESHOLD))
     print("剩余 {:.2f} 天，阈值 {} 天".format(left, threshold))
 
-    if left > threshold:
+    if left > threshold and "--test-heal" not in sys.argv:
         return 0
+
+    # 先自己修：强制续一次
+    dry = "--test-heal" in sys.argv
+    print("低于阈值，尝试自动续期{}...".format("（演练）" if dry else ""))
+    ok, out = try_renew(dry)
+    exp2, left2 = cert_expiry()
+
+    if ok and not dry:
+        text = (
+            "### 码表核对 · 证书已自动续上\n\n"
+            "刚才检查发现只剩 {:.1f} 天，已经自动强制续期，现在剩余 **{:.1f} 天**。\n\n"
+            "站点：{}\n\n"
+            "---\n\n"
+            "**不用你操作**，这条只是告诉你一声。\n\n"
+            "不过正常情况不该走到这一步——每天两次的自动续期应该早就续上了。"
+            "如果以后经常收到这条，说明自动续期有问题，值得查一下。"
+        ).format(left, left2 if left2 else 0, SITE)
+        send_dm("证书已自动续上", text)
+        return 3
+
+    if dry:
+        print("演练结果:", "成功" if ok else "失败")
+        print(out[-300:].encode("ascii", "backslashreplace").decode("ascii"))
+        return 0 if ok else 4
 
     text = (
         "### 码表核对 · HTTPS 证书快到期\n\n"
@@ -171,8 +208,9 @@ def main():
         "1. 上服务器跑 `certbot renew --force-renewal`\n"
         "2. 失败就看 `/var/log/letsencrypt/letsencrypt.log`\n"
         "3. 常见原因：80 端口被占（续期验证走 webroot）、安全组改过\n\n"
-        "证书一过期，店长打开就是「无法访问」，而且不会知道原因。"
-    ).format(left, exp.strftime("%Y-%m-%d %H:%M UTC"), SITE)
+        "证书一过期，店长打开就是「无法访问」，而且不会知道原因。\n\n"
+        "**自动续期已经试过了，失败**，输出：\n\n```\n{}\n```"
+    ).format(left, exp.strftime("%Y-%m-%d %H:%M UTC"), SITE, out)
     send_dm("证书快到期", text)
     return 2
 
