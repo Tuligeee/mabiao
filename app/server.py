@@ -228,6 +228,9 @@ def require_hq():
     if a and a.get("type") == "store":
         raise AuthError("只有总部能操作")
 SCOPE_CLASS = "推币机"          # 参与码表核对的机台大类
+# 对外地址：二维码要编这个，而不是反代回源时的 IP
+PUBLIC_BASE = (os.environ.get("METER_PUBLIC_BASE") or "").rstrip("/")
+
 SHARED_TEAM = "屏幕机"          # 该子类型是四联机共用一个码表
 RATE = 10.0                     # 彩票 → 币 换算率
 
@@ -958,9 +961,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(401, {"error": "未登录"})
         try:
             if p.endswith("/qr"):
-                pre = (self.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-                proto = self.headers.get("X-Forwarded-Proto") or "https"
-                origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
+                if PUBLIC_BASE:
+                    origin = PUBLIC_BASE
+                else:
+                    pre = (self.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
+                    proto = self.headers.get("X-Forwarded-Proto") or "https"
+                    origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
                 html = qr_page((q.get("shop_id") or [""])[0], origin)
                 return self._send(200, html, "text/html; charset=utf-8")
             if p == "/api/unit":
