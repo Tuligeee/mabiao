@@ -959,7 +959,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if p.endswith("/qr"):
                 pre = (self.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-                origin = "http://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
+                proto = self.headers.get("X-Forwarded-Proto") or "https"
+                origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
                 html = qr_page((q.get("shop_id") or [""])[0], origin)
                 return self._send(200, html, "text/html; charset=utf-8")
             if p == "/api/unit":
