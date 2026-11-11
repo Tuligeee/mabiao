@@ -134,11 +134,32 @@ async function openScanner() {
     v.srcObject = scanStream;
     await v.play();
     $('scanHint').textContent = '对准机台上的二维码';
+    setupTorch();
     tickScan();
   } catch (e) {
     $('scanHint').textContent = e.name === 'NotAllowedError'
       ? '摄像头权限被拒绝，去浏览器设置里允许' : ('打不开摄像头：' + e.message);
   }
+}
+
+function setupTorch() {
+  const btn = $('scanTorch');
+  btn.hidden = true;
+  if (!scanStream) return;
+  const track = scanStream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+  if (!caps || !caps.torch) return;
+  btn.hidden = false;
+  let on = false;
+  btn.onclick = async () => {
+    on = !on;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on }] });
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    } catch (e) {
+      btn.hidden = true;
+    }
+  };
 }
 
 function stopScanner() {

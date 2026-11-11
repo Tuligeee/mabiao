@@ -788,13 +788,13 @@ body[data-scan="1"] .ctx { display: none; }
 .scanner__mask {
   position: absolute; inset: 0;
   display: grid; place-items: center;
-  background: rgb(0 0 0 / 0.45);
   pointer-events: none;
 }
+/* 只在框外加一层黑，框内保持原始亮度 */
 .scanner__box {
-  inline-size: min(68vw, 18rem); block-size: min(68vw, 18rem);
-  border: 2px solid #fff; border-radius: var(--radius-lg);
-  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45);
+  inline-size: min(72vw, 19rem); block-size: min(72vw, 19rem);
+  border: 2px solid rgb(255 255 255 / 0.9); border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.38);
 }
 .scanner__bar {
   position: absolute; inset-inline: 0; inset-block-end: 0;
@@ -806,3 +806,13 @@ body[data-scan="1"] .ctx { display: none; }
   flex: 1; margin: 0; font-size: var(--text-sm); color: #fff;
 }
 body[data-scanning="1"] { overflow: hidden; }
+
+.scanner__torch {
+  flex: none;
+  inline-size: var(--space-10); block-size: var(--space-10);
+  display: grid; place-items: center;
+  color: #fff; background: rgb(255 255 255 / 0.18);
+  border: 0; border-radius: 50%; cursor: pointer;
+}
+.scanner__torch[aria-pressed="true"] { background: #fff; color: #000; }
+.scanner__torch svg { inline-size: var(--space-5); block-size: var(--space-5); }
