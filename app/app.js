@@ -59,13 +59,15 @@ const toast = UI.toast;
 
 /* ------------------------------------------------------------ 视图 */
 function syncDayLock() {
-  const lock = S.role === 'store' && S.view === 'entry';
-  const btn = $('dayBtn');
-  if (!btn) return;
-  btn.disabled = lock;
-  btn.setAttribute('aria-disabled', lock ? 'true' : 'false');
-  btn.title = lock ? '门店只填昨天的码表，看历史去核对页' : '';
-  if (lock && S.editDay && S.day !== S.editDay) {
+  const wrap = $('dayPick');
+  if (!wrap) return;
+  const store = S.role === 'store';
+  // 门店：日期只在核对页出现（填写页固定昨天，不需要选）
+  // 总部：填写 / 核对 / 全链都能切日期
+  const show = store ? S.view === 'recon'
+    : ['entry', 'recon', 'overview'].indexOf(S.view) >= 0;
+  wrap.hidden = !show;
+  if (store && S.view === 'entry' && S.editDay && S.day !== S.editDay) {
     S.day = S.editDay;
     if (dayPicker) dayPicker.set(S.editDay);
   }
@@ -1431,10 +1433,7 @@ async function boot() {
 
 function applyRole() {
   const store = S.role === 'store';
-  $('who').hidden = false;
-  $('whoName').textContent = store
-    ? (S.me && S.me.shop ? S.me.shop.name : '门店')
-    : '总部';
+  $('tools').hidden = false;
   const navOv = document.querySelector('.nav__item[data-view="overview"]');
   if (navOv) navOv.hidden = store;
   $('shopBtn').disabled = store;

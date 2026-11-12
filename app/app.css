@@ -859,3 +859,18 @@ body[data-scanning="1"] { overflow: hidden; }
   color: var(--ink-4); cursor: not-allowed; background: transparent;
 }
 .dp__day[data-off="true"]:hover { background: transparent; }
+
+/* 顶栏右侧工具区 */
+.tools {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-inline-start: auto; min-inline-size: 0;
+}
+.tools .pick { min-inline-size: 0; }
+.pick--sm .pick__btn { block-size: var(--ctl-h-sm); font-size: var(--text-sm); }
+.pick--sm .pick__val { max-inline-size: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 47.99em) {
+  .tools { gap: var(--space-1); }
+  .tools .conn { display: none; }
+  .pick--sm .pick__val { max-inline-size: 7rem; }
+}
