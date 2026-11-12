@@ -58,8 +58,22 @@ async function api(path, body) {
 const toast = UI.toast;
 
 /* ------------------------------------------------------------ 视图 */
+function syncDayLock() {
+  const lock = S.role === 'store' && S.view === 'entry';
+  const btn = $('dayBtn');
+  if (!btn) return;
+  btn.disabled = lock;
+  btn.setAttribute('aria-disabled', lock ? 'true' : 'false');
+  btn.title = lock ? '门店只填昨天的码表，看历史去核对页' : '';
+  if (lock && S.editDay && S.day !== S.editDay) {
+    S.day = S.editDay;
+    if (dayPicker) dayPicker.set(S.editDay);
+  }
+}
+
 function setView(v) {
   S.view = v;
+  syncDayLock();
   ['home', 'entry', 'recon', 'overview', 'settings', 'scan'].forEach((k) => {
     $('view-' + k).hidden = k !== v;
   });
@@ -376,7 +390,8 @@ async function loadEntry() {
     return;
   }
   $('entryLede').textContent = (S.kind === 'pachinko' ? '弹珠机' : '推币机')
-    + ' · ' + S.entry.length + ' 台 · 每台填两个累计读数，回车跳下一个';
+    + ' · ' + S.entry.length + ' 台 · 每台填两个累计读数，回车跳下一个'
+    + (S.role === 'store' ? ' · 填的是 ' + S.day + ' 关门时的数' : '');
   if (!S.confirmed) {
     $('confirmPanel').hidden = false;
     $('entryList').hidden = true;
@@ -1398,12 +1413,6 @@ async function boot() {
       if (S.view === 'overview') loadOverview();
     },
   });
-
-  if (S.role === 'store') {
-    $('dayBtn').disabled = true;
-    $('dayBtn').setAttribute('aria-disabled', 'true');
-    $('dayBtn').title = '门店只填昨天的码表';
-  }
 
   applyRole();
   if (!b.units_confirmed) welcomeDialog(b);
