@@ -403,6 +403,9 @@ def init_db():
             c.execute("ALTER TABLE shops ADD COLUMN group_name TEXT")
         c.execute("CREATE TABLE IF NOT EXISTS shop_map("
                   "cwsj_key TEXT PRIMARY KEY, shop_id TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS recon_notes("
+                  "shop_id TEXT, day TEXT, unit_id INTEGER, reason TEXT, note TEXT, "
+                  "updated_at TEXT, updated_by TEXT, PRIMARY KEY(shop_id,day,unit_id))")
         ensure_codes()
         ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
         if "locked" not in ucols:
@@ -617,6 +620,34 @@ def fetch_day(shop_id: str, day: str) -> dict:
     return {"up_rows": len(U), "down_rows": len(D)}
 
 
+# 抄表在次日早上做：码表读数是当天日终值，第二天来填。
+# 所以门店只能填「昨天」，过了就锁死；总部不限。
+EDIT_REASONS = ["换码表或归零重计", "机器故障没走系统", "宝点数据延迟",
+                "人为抄错已改", "其他"]
+
+
+def edit_day() -> str:
+    """门店今天该填的日期。"""
+    return (date.today() - timedelta(days=1)).isoformat()
+
+
+def can_edit(day: str) -> bool:
+    if not is_store():
+        return True
+    return day == edit_day()
+
+
+def recon_note(shop_id: str, day: str, unit_id: int, reason: str, note: str) -> dict:
+    with conn() as c:
+        c.execute("INSERT INTO recon_notes(shop_id,day,unit_id,reason,note,updated_at,updated_by) "
+                  "VALUES(?,?,?,?,?,?,?) ON CONFLICT(shop_id,day,unit_id) DO UPDATE SET "
+                  "reason=excluded.reason, note=excluded.note, "
+                  "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+                  (shop_id, day, unit_id, reason, note, now(),
+                   (actor() or {}).get("name") or "?"))
+    return {"ok": True}
+
+
 def prev_reading(shop_id: str, unit_id: int, day: str):
     with conn() as c:
         r = c.execute("SELECT day,in_r,out_r,p_tokens,p_out,p_cards FROM readings "
@@ -635,6 +666,9 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         reads = {}
         for r in c.execute("SELECT * FROM readings WHERE shop_id=? AND day=?", (shop_id, day)):
             reads[r["unit_id"]] = dict(r)
+        notes = {}
+        for r in c.execute("SELECT * FROM recon_notes WHERE shop_id=? AND day=?", (shop_id, day)):
+            notes[r["unit_id"]] = dict(r)
 
     rows = []
     for u in units:
@@ -701,6 +735,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "in_r": rd["in_r"] if rd else None, "out_r": rd["out_r"] if rd else None,
             "prev_in": pv["in_r"] if pv else None, "prev_out": pv["out_r"] if pv else None,
             "note": rd["note"] if rd else None,
+            "reason": (notes.get(u["id"]) or {}).get("reason"),
+            "reason_note": (notes.get(u["id"]) or {}).get("note"),
         })
 
     ok = [r for r in rows if r["status"] == "正常"]
@@ -720,6 +756,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
 
 def save_readings(shop_id: str, day: str, items: list) -> dict:
     """items: [{unit_id, in_r, out_r, note}] → 保存 + 留痕 + 返回读数下降告警"""
+    if not can_edit(day):
+        raise RuntimeError("门店只能填 %s 的码表，%s 已经锁了" % (edit_day(), day))
     warns = []
     ts = now()
     with conn() as c:
@@ -969,6 +1007,8 @@ class Handler(BaseHTTPRequestHandler):
                     origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
                 html = qr_page((q.get("shop_id") or [""])[0], origin)
                 return self._send(200, html, "text/html; charset=utf-8")
+            if p == "/api/recon/note":
+                return self._send(200, api_recon_note(b))
             if p == "/api/unit":
                 return self._send(200, api_unit(q))
             if p == "/api/kinds":
@@ -1390,6 +1430,7 @@ def api_bootstrap():
         "baodian_ok": bd_ok,
         "baodian_msg": bd_msg,
         "today": date.today().isoformat(),
+        "edit_day": edit_day(),
         "scope_class": SCOPE_CLASS,
         "rate": RATE,
         "units_confirmed": (shop_row(sid) or {}).get("units_confirmed") if sid else None,
@@ -1701,9 +1742,18 @@ def confirm_units(shop_id: str, unit_ids: list) -> dict:
 
 def api_entry(q):
     sid = guard_shop((q.get("shop_id") or [meta_get("shop_id")])[0])
-    day = (q.get("day") or [date.today().isoformat()])[0]
+    day = (q.get("day") or [edit_day()])[0]
     kind = (q.get("kind") or ["pusher"])[0]
-    return entry_view(sid, day, kind)
+    out = entry_view(sid, day, kind)
+    out["can_edit"] = can_edit(day)
+    out["edit_day"] = edit_day()
+    return out
+
+
+def api_recon_note(b) -> dict:
+    shop_id = guard_shop(b["shop_id"])
+    return recon_note(shop_id, b["day"], int(b["unit_id"]),
+                      (b.get("reason") or "").strip(), (b.get("note") or "").strip())
 
 
 def api_recon(q):

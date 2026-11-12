@@ -816,3 +816,40 @@ body[data-scanning="1"] { overflow: hidden; }
 }
 .scanner__torch[aria-pressed="true"] { background: #fff; color: #000; }
 .scanner__torch svg { inline-size: var(--space-5); block-size: var(--space-5); }
+
+/* ---------------------------------------------------------------- 误差原因 */
+.reason { white-space: nowrap; }
+.reason__chip, .reason__add {
+  font: inherit; font-size: var(--text-xs); cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.reason__chip {
+  color: var(--ink-2); background: var(--hover); border-color: var(--line);
+  max-width: 12rem; overflow: hidden; text-overflow: ellipsis;
+}
+.reason__chip:hover { background: var(--line); }
+.reason__add {
+  color: var(--accent); background: transparent; border-color: var(--accent);
+}
+.reason__add:hover { background: var(--accent-bg); }
+.reason__chip:focus-visible, .reason__add:focus-visible {
+  outline: none; box-shadow: var(--shadow-focus-ring);
+}
+
+.reason-list { display: grid; gap: var(--space-1); margin-block-end: var(--space-3); }
+.reason-opt {
+  font: inherit; font-size: var(--text-sm); text-align: start; cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-2); background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out);
+}
+.reason-opt:hover { border-color: var(--line-strong); }
+.reason-opt[aria-pressed="true"] {
+  color: var(--accent); border-color: var(--accent); background: var(--accent-bg);
+  font-weight: var(--weight-medium);
+}
+.reason-opt:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }

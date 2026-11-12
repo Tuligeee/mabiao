@@ -361,6 +361,7 @@ async function loadHome() {
 
 /* ------------------------------------------------------------ 录入 */
 async function loadEntry() {
+  if (S.role === 'store' && S.editDay) S.day = S.editDay;
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
   S.allRows = d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length }));
   S.confirmed = !!d.confirmed;
@@ -648,9 +649,9 @@ function renderRecon() {
   const hr = el('tr');
   const cols = pach
     ? [['机台', ''], ['宝点投币', 'num'], ['码表投币', 'num'], ['差', 'num'],
-       ['返珠率', 'num'], ['收益', 'num']]
+       ['返珠率', 'num'], ['收益', 'num'], ['状态', ''], ['原因', '']]
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
-       ['误差', 'num'], ['状态', '']];
+       ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
     const th = el('th', cls, t);
     th.scope = 'col';
@@ -686,12 +687,100 @@ function renderRecon() {
       const td = el('td', 'num lead', fmt(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1000) td.dataset.tone = 'bad';
       tr.appendChild(td);
-      const st = el('td');
-      st.appendChild(statusTag(r.status));
-      tr.appendChild(st);
     }
+
+    const st = el('td');
+    st.appendChild(statusTag(r.status));
+    tr.appendChild(st);
+    tr.appendChild(reasonCell(r));
     body.appendChild(tr);
   });
+}
+
+const REASONS = ['换码表或归零重计', '机器故障没走系统', '宝点数据延迟',
+  '人为抄错已改', '其他'];
+
+function reasonCell(r) {
+  const td = el('td', 'reason');
+  const hasDiff = r.diff !== null && r.diff !== undefined && Math.abs(r.diff) >= 1;
+  if (r.reason) {
+    const b = el('button', 'reason__chip', r.reason);
+    b.type = 'button';
+    if (r.reason_note) b.title = r.reason_note;
+    b.addEventListener('click', () => reasonDialog(r));
+    td.appendChild(b);
+  } else if (hasDiff) {
+    const b = el('button', 'reason__add', '填原因');
+    b.type = 'button';
+    b.addEventListener('click', () => reasonDialog(r));
+    td.appendChild(b);
+  }
+  return td;
+}
+
+function reasonDialog(r) {
+  const scrim = el('div', 'scrim');
+  const dlg = el('div', 'dlg');
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.appendChild(el('h2', 'dlg__t', r.name));
+  const sub = el('p', 'dlg__d');
+  sub.textContent = '误差 ' + fmt(r.diff) + '，说明一下原因';
+  dlg.appendChild(sub);
+
+  const list = el('div', 'reason-list');
+  let picked = r.reason || '';
+  const btns = [];
+  REASONS.forEach((txt) => {
+    const b = el('button', 'reason-opt', txt);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', txt === picked ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      picked = txt;
+      btns.forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+      note.focus();
+    });
+    btns.push(b);
+    list.appendChild(b);
+  });
+  dlg.appendChild(list);
+
+  const note = el('input', 'input');
+  note.type = 'text';
+  note.placeholder = '补充说明（可选）';
+  note.value = r.reason_note || '';
+  dlg.appendChild(note);
+
+  const acts = el('div', 'dlg__acts');
+  const cancel = el('button', 'btn btn--quiet', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => scrim.remove());
+  const save = el('button', 'btn btn--primary', '保存');
+  save.type = 'button';
+  save.addEventListener('click', async () => {
+    if (!picked) { toast('先选一个原因', 'bad'); return; }
+    save.disabled = true;
+    try {
+      await api('/api/recon/note', {
+        shop_id: S.shopId, day: S.day, unit_id: r.unit_id,
+        reason: picked, note: note.value.trim(),
+      });
+      r.reason = picked;
+      r.reason_note = note.value.trim();
+      scrim.remove();
+      renderRecon();
+      toast('已记录');
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+      save.disabled = false;
+    }
+  });
+  acts.appendChild(cancel);
+  acts.appendChild(save);
+  dlg.appendChild(acts);
+  scrim.appendChild(dlg);
+  document.body.appendChild(scrim);
+  save.focus();
 }
 
 /* ------------------------------------------------------------ 全链 */
@@ -1260,7 +1349,8 @@ async function boot() {
   S.shops = b.shops;
   S.units = b.units;
   S.bdOk = b.baodian_ok;
-  S.day = b.today;
+  S.day = b.edit_day || b.today;
+  S.editDay = b.edit_day || b.today;
 
   const conn = $('conn');
   conn.dataset.state = S.bdOk ? 'ok' : 'bad';
@@ -1308,6 +1398,12 @@ async function boot() {
       if (S.view === 'overview') loadOverview();
     },
   });
+
+  if (S.role === 'store') {
+    $('dayBtn').disabled = true;
+    $('dayBtn').setAttribute('aria-disabled', 'true');
+    $('dayBtn').title = '门店只填昨天的码表';
+  }
 
   applyRole();
   if (!b.units_confirmed) welcomeDialog(b);
