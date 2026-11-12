@@ -714,7 +714,7 @@ function renderRecon() {
   });
 }
 
-const REASONS = ['换码表或归零重计', '机器故障没走系统', '宝点数据延迟',
+const REASONS = ['换码表或归零重计', '机器故障没走系统', '未下完分断电',
   '人为抄错已改', '其他'];
 
 function reasonCell(r) {
