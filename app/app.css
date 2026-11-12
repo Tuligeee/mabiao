@@ -412,6 +412,8 @@ body {
 @keyframes fade { from { opacity: 0; } }
 .dlg {
   inline-size: min(var(--dlg-w), 100%);
+  max-block-size: calc(100dvh - var(--space-8));
+  overflow-y: auto;
   padding: var(--space-6);
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-dlg);
@@ -420,7 +422,10 @@ body {
 @keyframes rise { from { opacity: 0; transform: translateY(var(--space-1.5)); } }
 .dlg__t { margin: 0 0 var(--space-2); font-size: var(--text-xl); font-weight: var(--weight-semibold); letter-spacing: -0.02em; }
 .dlg__d { margin: 0 0 var(--space-6); font-size: var(--text-sm); color: var(--ink-2); }
-.dlg__acts { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.dlg__acts {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  margin-block-start: var(--space-5);
+}
 .dlg__acts .btn--danger { color: var(--on-solid); background: var(--bad); border-color: var(--bad); }
 .dlg__acts .btn--danger:hover { background: var(--bad); border-color: var(--bad); filter: brightness(0.92); }
 
@@ -884,3 +889,10 @@ body[data-scanning="1"] { overflow: hidden; }
 
 /* 核对页导出按钮：跟在说明文字下面 */
 .recon-export { margin-block-start: var(--space-3); }
+
+/* 原因弹窗：补充说明的标签和输入框 */
+.reason-label {
+  display: block;
+  margin-block-end: var(--space-2);
+  font-size: var(--text-xs); color: var(--ink-3);
+}

@@ -762,10 +762,14 @@ function reasonDialog(r) {
   });
   dlg.appendChild(list);
 
+  const lab = el('label', 'reason-label', '补充说明（可选，不填也行）');
   const note = el('input', 'input');
   note.type = 'text';
-  note.placeholder = '补充说明（可选）';
+  note.placeholder = '比如：换了 3 号码表';
   note.value = r.reason_note || '';
+  lab.setAttribute('for', 'reasonNote');
+  note.id = 'reasonNote';
+  dlg.appendChild(lab);
   dlg.appendChild(note);
 
   const acts = el('div', 'dlg__acts');
