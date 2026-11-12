@@ -853,3 +853,9 @@ body[data-scanning="1"] { overflow: hidden; }
   font-weight: var(--weight-medium);
 }
 .reason-opt:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
+
+/* 日期上限：超出的一律置灰 */
+.dp__day[data-off="true"] {
+  color: var(--ink-4); cursor: not-allowed; background: transparent;
+}
+.dp__day[data-off="true"]:hover { background: transparent; }

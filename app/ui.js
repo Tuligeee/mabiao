@@ -92,7 +92,7 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------- 日期 */
-  function datePicker({ btn, pop, valueEl, value, onChange }) {
+  function datePicker({ btn, pop, valueEl, value, onChange, max }) {
     let cur = value ? new Date(value + 'T00:00:00') : new Date();
     cur.setDate(1);
     let sel = value || '';
@@ -148,6 +148,13 @@ const UI = (() => {
         b.dataset.iso = v;
         if (v === sel) b.setAttribute('aria-selected', 'true');
         if (v === todayIso) b.dataset.today = 'true';
+        if (max && v > max) {
+          b.disabled = true;
+          b.dataset.off = 'true';
+          b.setAttribute('aria-disabled', 'true');
+          grid.appendChild(b);
+          continue;
+        }
         b.addEventListener('click', () => {
           sel = v;
           valueEl.textContent = fmtLabel(v);
@@ -160,10 +167,11 @@ const UI = (() => {
       pop.appendChild(grid);
 
       const foot = el('div', 'dp__foot');
-      const t = el('button', 'dp__today', '回到今天');
+      const jumpIso = max || todayIso;
+      const t = el('button', 'dp__today', max ? '回到最近一天' : '回到今天');
       t.type = 'button';
       t.addEventListener('click', () => {
-        sel = todayIso;
+        sel = jumpIso;
         valueEl.textContent = fmtLabel(sel);
         close();
         onChange(sel);

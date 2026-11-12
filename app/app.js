@@ -1406,6 +1406,7 @@ async function boot() {
     pop: $('dayPop'),
     valueEl: $('dayVal'),
     value: S.day,
+    max: S.editDay,
     onChange: async (v) => {
       S.day = v;
       await loadEntry();
