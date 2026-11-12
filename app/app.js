@@ -723,9 +723,11 @@ function reasonCell(r) {
   if (r.reason) {
     const b = el('button', 'reason__chip', r.reason);
     b.type = 'button';
-    if (r.reason_note) b.title = r.reason_note;
     b.addEventListener('click', () => reasonDialog(r));
     td.appendChild(b);
+    if (r.reason_note) {
+      td.appendChild(el('span', 'reason__note', r.reason_note));
+    }
   } else if (hasDiff) {
     const b = el('button', 'reason__add', '填原因');
     b.type = 'button';
