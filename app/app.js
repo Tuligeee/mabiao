@@ -377,7 +377,7 @@ async function loadHome() {
 
 /* ------------------------------------------------------------ 录入 */
 async function loadEntry() {
-  if (S.role === 'store' && S.editDay) S.day = S.editDay;
+  if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
   S.allRows = d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length }));
   S.confirmed = !!d.confirmed;
@@ -798,6 +798,44 @@ function reasonDialog(r) {
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   save.focus();
+}
+
+function exportRecon() {
+  const d = S.recon;
+  if (!d || !d.rows.length) { toast('没有数据可导', 'bad'); return; }
+  const pach = S.kind === 'pachinko';
+  const head = pach
+    ? ['机台', '宝点投币', '码表投币', '差', '返珠率', '收益', '状态', '原因']
+    : ['机台', '上币', '下币', '码表收币', '误差', '状态', '原因'];
+
+  const cell = (v) => {
+    if (v === null || v === undefined) return '';
+    const s2 = String(v);
+    return /[",\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2;
+  };
+
+  const lines = [head.join(',')];
+  d.rows.forEach((r) => {
+    const reason = [r.reason, r.reason_note].filter(Boolean).join('：');
+    const row = pach
+      ? [r.name, r.up, r.meter, r.diff,
+         r.p && r.p.rate != null ? (r.p.rate * 100).toFixed(1) + '%' : '',
+         r.p && r.p.profit != null ? r.p.profit : '',
+         r.status, reason]
+      : [r.name, r.up, r.down, r.meter, r.diff, r.status, reason];
+    lines.push(row.map(cell).join(','));
+  });
+
+  const shop = (S.shops.find((x) => x.id === S.shopId) || {}).name || '门店';
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '核对_' + shop + '_' + S.day + (pach ? '_弹珠机' : '_推币机') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('已导出');
 }
 
 /* ------------------------------------------------------------ 全链 */
@@ -1411,9 +1449,9 @@ async function boot() {
     max: S.editDay,
     onChange: async (v) => {
       S.day = v;
-      await loadEntry();
-      if (S.view === 'recon') loadRecon();
-      if (S.view === 'overview') loadOverview();
+      if (S.view === 'entry') await loadEntry();
+      else if (S.view === 'recon') await loadRecon();
+      else if (S.view === 'overview') await loadOverview();
     },
   });
 
@@ -1447,6 +1485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
+  $('btnExport').addEventListener('click', exportRecon);
   $('btnConfirm').addEventListener('click', confirmUnits);
   $('btnFetchAll').addEventListener('click', fetchAll);
   $('btnImportShops').addEventListener('click', importShops);

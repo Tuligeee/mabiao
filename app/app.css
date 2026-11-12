@@ -874,3 +874,13 @@ body[data-scanning="1"] { overflow: hidden; }
   .tools .conn { display: none; }
   .pick--sm .pick__val { max-inline-size: 7rem; }
 }
+
+/* 页面标题行：标题 + 右侧操作 */
+.head-row {
+  display: flex; align-items: flex-start; gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.head-row .btn { margin-inline-start: auto; }
+
+/* 核对页导出按钮：跟在说明文字下面 */
+.recon-export { margin-block-start: var(--space-3); }
