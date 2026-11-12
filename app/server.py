@@ -1015,8 +1015,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_me())
             if p == "/api/bootstrap":
                 return self._send(200, api_bootstrap())
-            if p == "/api/recon/note":
-                return self._send(200, api_recon_note(b))
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
             if p == "/api/recon":
@@ -1058,6 +1056,8 @@ class Handler(BaseHTTPRequestHandler):
         if p.startswith("/api/") and p != "/api/login" and actor() is None:
             return self._send(401, {"error": "未登录"})
         try:
+            if p == "/api/recon/note":
+                return self._send(200, api_recon_note(b))
             if p == "/api/entry":
                 return self._send(200, save_readings(b["shop_id"], b["day"], b.get("items") or []))
             if p == "/api/fetch":
