@@ -1007,8 +1007,6 @@ class Handler(BaseHTTPRequestHandler):
                     origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
                 html = qr_page((q.get("shop_id") or [""])[0], origin)
                 return self._send(200, html, "text/html; charset=utf-8")
-            if p == "/api/recon/note":
-                return self._send(200, api_recon_note(b))
             if p == "/api/unit":
                 return self._send(200, api_unit(q))
             if p == "/api/kinds":
@@ -1017,6 +1015,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_me())
             if p == "/api/bootstrap":
                 return self._send(200, api_bootstrap())
+            if p == "/api/recon/note":
+                return self._send(200, api_recon_note(b))
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
             if p == "/api/recon":
