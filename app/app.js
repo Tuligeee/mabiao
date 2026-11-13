@@ -1169,20 +1169,24 @@ function pachinkoCfg() {
 
   const bead = mk('珠值', 'bead_value', '0.022');
   const card = mk('卡片价值', 'card_value', '0.01785');
+  const per = mk('一币 = 几珠', 'beads_per_coin', '20');
 
   const btn = el('button', 'btn btn--sm btn--primary', '保存参数');
   btn.type = 'button';
   btn.addEventListener('click', async () => {
     const b = parseFloat(bead.value);
     const c = parseFloat(card.value);
-    if (!isFinite(b) || !isFinite(c)) { toast('两个值都要填数字', 'bad'); return; }
+    const q = parseFloat(per.value);
+    if (!isFinite(b) || !isFinite(c)) { toast('珠值和卡片价值都要填数字', 'bad'); return; }
+    if (!isFinite(q) || q <= 0) { toast('「一币 = 几珠」要填大于 0 的数字', 'bad'); return; }
     btn.disabled = true;
     try {
       await api('/api/manage/shop/values', {
-        shop_id: MSHOP.id, bead_value: b, card_value: c,
+        shop_id: MSHOP.id, bead_value: b, card_value: c, beads_per_coin: q,
       });
       MSHOP.bead_value = b;
       MSHOP.card_value = c;
+      MSHOP.beads_per_coin = q;
       toast('参数已保存');
     } catch (e) {
       toast(String(e.message || e), 'bad');
@@ -1209,7 +1213,21 @@ function renderMachineView(card, g) {
 
   const ul = el('ul', 'machine__comms');
   ul.setAttribute('aria-label', g.key + ' 的卡头');
-  g.comms.forEach((c) => ul.appendChild(el('li', 'chip', c)));
+  if (g.merged) {
+    // 共用码表：一个位置，多个卡头喂同一块表
+    const li = el('li', 'chip chip--pos');
+    li.appendChild(el('b', null, 'P1'));
+    li.appendChild(el('span', null, g.comms.join(' · ')));
+    ul.appendChild(li);
+  } else {
+    g.units.forEach((u, i) => {
+      const li = el('li', 'chip chip--pos');
+      li.appendChild(el('b', null, 'P' + (u.pos || i + 1)));
+      const ids = (u.comms || []).map((x) => (x && x.comm_id) || x);
+      li.appendChild(el('span', null, ids.join(' / ')));
+      ul.appendChild(li);
+    });
+  }
   card.appendChild(ul);
 
   const foot = el('footer', 'machine__foot');

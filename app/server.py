@@ -111,6 +111,8 @@ def ensure_codes():
             c.execute("ALTER TABLE units ADD COLUMN code TEXT")
         if "pos" not in ucols:
             c.execute("ALTER TABLE units ADD COLUMN pos INTEGER")
+        if "beads_per_coin" not in scols:
+            c.execute("ALTER TABLE shops ADD COLUMN beads_per_coin REAL")
 
         # 门店编号 S01..S16
         todo = [dict(r) for r in c.execute(
@@ -139,16 +141,21 @@ def ensure_codes():
             c.execute("UPDATE units SET code=? WHERE id=?",
                       ("%s-%03d" % (shops.get(r["shop_id"]) or "X", k2), r["id"]))
 
-        # 位置号：同一台机下按顺序 P1..Pn
+        # 位置号：同一台机下按通讯ID顺序重排 P1..Pn。
+        # 每次都全量重算 —— 只补 NULL 的话，删掉重建的机台会停在 P1（可乐风暴撞过一次）。
         rows = [dict(r) for r in c.execute(
-            "SELECT id, shop_id, name FROM units WHERE pos IS NULL ORDER BY shop_id, name, id")]
+            "SELECT u.id, u.shop_id, u.name, "
+            "  (SELECT MIN(comm_id) FROM comms WHERE unit_id=u.id) AS first_comm "
+            "FROM units u ORDER BY u.shop_id, u.name, u.id")]
         groups = {}
         for r in rows:
             base = re.sub(r"\s+\d{5,}$", "", r["name"]).strip() or r["name"]
-            groups.setdefault((r["shop_id"], base), []).append(r["id"])
-        for _key, ids in groups.items():
-            for i, uid in enumerate(ids, 1):
-                c.execute("UPDATE units SET pos=? WHERE id=?", (i, uid))
+            groups.setdefault((r["shop_id"], base), []).append(r)
+        for _key, items in groups.items():
+            items.sort(key=lambda x: (x["first_comm"] or "999999", x["id"]))
+            for i, it in enumerate(items, 1):
+                if it.get("pos") != i:
+                    c.execute("UPDATE units SET pos=? WHERE id=?", (i, it["id"]))
 
 
 def machine_of(uid: int) -> str:
@@ -698,7 +705,11 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
                 d_tokens = (rd["p_tokens"] or 0) - (pv["p_tokens"] or 0)
                 d_out = (rd["p_out"] or 0) - (pv["p_out"] or 0)
                 d_cards = (rd["p_cards"] or 0) - (pv["p_cards"] or 0)
-            win = (d_out - tin) if (d_out is not None and tin is not None) else None
+            # 码表记的是投币数，要乘「一币几珠」才是投币出珠（珠）
+            row_shop0 = shop_row(shop_id) or {}
+            per_coin = row_shop0.get("beads_per_coin")
+            paid_beads = (tin * per_coin) if (tin is not None and per_coin) else None
+            win = (d_out - paid_beads) if (d_out is not None and paid_beads is not None) else None
             keep = (d_tokens - win) if (d_tokens is not None and win is not None) else None
             rate_p = (win / d_tokens) if (win is not None and d_tokens) else None
             row_shop = shop_row(shop_id) or {}
@@ -708,6 +719,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             if keep is not None and d_cards is not None and bead and cardv:
                 profit = keep * bead - d_cards * cardv
             p_metrics = {
+                "coins": tin, "per_coin": per_coin, "paid": paid_beads,
                 "tokens": d_tokens, "out": d_out, "cards": d_cards,
                 "win": win, "keep": keep, "rate": rate_p, "profit": profit,
             }
@@ -1693,13 +1705,14 @@ def manage_machines(shop_id: str) -> list:
 
 
 def save_shop_values(b: dict) -> dict:
-    """弹珠机的珠值 / 卡片价值，按店配置。"""
+    """弹珠机的珠值 / 卡片价值 / 一币几珠，按店配置。"""
     shop_id = guard_shop(b["shop_id"])
     bead = b.get("bead_value")
     card = b.get("card_value")
+    per = b.get("beads_per_coin")
     with conn() as c:
-        c.execute("UPDATE shops SET bead_value=?, card_value=? WHERE id=?",
-                  (bead, card, shop_id))
+        c.execute("UPDATE shops SET bead_value=?, card_value=?, beads_per_coin=? WHERE id=?",
+                  (bead, card, per, shop_id))
     return {"ok": True}
 
 
