@@ -1033,7 +1033,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "public, max-age=600")
+                self.send_header("Cache-Control", "public, max-age=86400, immutable")
                 self.end_headers()
                 self.wfile.write(body)
                 return None
@@ -1314,6 +1314,8 @@ def _machine_groups(shop_id: str) -> list:
     return out
 
 
+QR_DESIGN = 3   # 贴纸版式版本，改一次 +1，图片 URL 跟着变，避免浏览器用旧缓存
+
 _QR_FONT_CACHE = {}
 
 
@@ -1439,10 +1441,10 @@ def qr_page(shop_id: str, origin: str, pre: str = "") -> str:
         cards.append(
             '<label class="qrc">'
             '<input type="checkbox" class="qrc__cb" value="%s">'
-            '<img src="qr/img?c=%s" alt="%s" loading="lazy">'
+            '<img src="qr/img?c=%s&d=%s" alt="%s" loading="lazy">'
             '<span class="qrc__t">%s</span>'
             '<span class="qrc__s">%s</span>'
-            '</label>' % (m["code"], m["code"], m["name"], m["name"], sub))
+            '</label>' % (m["code"], m["code"], QR_DESIGN, m["name"], m["name"], sub))
     return """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>机台二维码 · %(shop)s</title>
