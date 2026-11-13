@@ -283,7 +283,8 @@ const UI = (() => {
     cur.setDate(1);
     let start = from || '';
     let end = to || '';
-    let picking = false;
+    let phase = 'start';   // start = 还没选起点；end = 已选起点，等终点
+    let hintEl = null;
 
     function label() {
       if (!start) return '选择区间';
@@ -296,28 +297,43 @@ const UI = (() => {
       document.removeEventListener('click', outside, true);
     }
     function outside(e) {
-      // 刚点的那一格可能已经被重绘替换掉，此时 e.target 已脱离文档，
-      // 不能当成「点了外面」，否则选第一下就自动关闭。
       if (!document.contains(e.target)) return;
       if (!pop.contains(e.target) && !btn.contains(e.target)) close();
     }
 
+    // 只改属性，不重建 DOM（重建会让被点的格子脱离文档，事件后续就乱套）
+    function paint() {
+      pop.querySelectorAll('.dp__day[data-iso]').forEach((b) => {
+        const v = b.dataset.iso;
+        b.removeAttribute('aria-selected');
+        b.removeAttribute('data-edge');
+        b.removeAttribute('data-in');
+        if (v === start) b.setAttribute('aria-selected', 'true');
+        if (v === end) b.dataset.edge = 'true';
+        if (start && end && v > start && v < end) b.dataset.in = 'true';
+      });
+      if (hintEl) {
+        hintEl.textContent = phase === 'end' ? '再点一天作为结束' : '点一天开始';
+      }
+    }
+
     function pick(v) {
-      if (!picking || !start) {
+      if (phase === 'start') {
         start = v;
         end = '';
-        picking = true;
-      } else {
-        end = v;
-        if (end < start) { const t = start; start = end; end = t; }
-        picking = false;
+        phase = 'end';
         valueEl.textContent = label();
-        close();
-        onChange(start, end);
-        btn.focus();
+        paint();
+        return;
       }
+      end = v;
+      if (end < start) { const t = start; start = end; end = t; }
+      phase = 'start';
       valueEl.textContent = label();
-      render();
+      paint();
+      close();
+      onChange(start, end);
+      btn.focus();
     }
 
     function render() {
@@ -350,9 +366,6 @@ const UI = (() => {
         const b = el('button', 'dp__day', String(d));
         b.type = 'button';
         b.dataset.iso = v;
-        if (v === start) b.setAttribute('aria-selected', 'true');
-        if (v === end) b.dataset.edge = 'true';
-        if (start && end && v > start && v < end) b.dataset.in = 'true';
         if (max && v > max) {
           b.disabled = true;
           b.dataset.off = 'true';
@@ -366,15 +379,18 @@ const UI = (() => {
       pop.appendChild(grid);
 
       const foot = el('div', 'dp__foot');
-      const hint = el('span', 'dp__hint', picking ? '再点一天作为结束' : '点一天开始');
-      foot.appendChild(hint);
+      hintEl = el('span', 'dp__hint', phase === 'end' ? '再点一天作为结束' : '点一天开始');
+      foot.appendChild(hintEl);
       pop.appendChild(foot);
+
+      paint();
     }
 
     function open() {
       if (start) { cur = new Date(start + 'T00:00:00'); cur.setDate(1); }
-      picking = !start || !end;
-      if (start && end) { picking = true; end = ''; }
+      phase = 'start';
+      end = '';
+      valueEl.textContent = label();
       render();
       pop.hidden = false;
       btn.setAttribute('aria-expanded', 'true');
@@ -388,7 +404,7 @@ const UI = (() => {
     });
 
     valueEl.textContent = label();
-    return { set(a, b) { start = a; end = b || ''; valueEl.textContent = label(); } };
+    return { set(a, b) { start = a; end = b || ''; phase = 'start'; valueEl.textContent = label(); } };
   }
 
   return { picker, datePicker, dateRangePicker, confirm, toast, el, iso, CHEV };
