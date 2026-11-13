@@ -806,42 +806,107 @@ function reasonDialog(r) {
   save.focus();
 }
 
-function exportRecon() {
-  const d = S.recon;
-  if (!d || !d.rows.length) { toast('没有数据可导', 'bad'); return; }
-  const pach = S.kind === 'pachinko';
-  const head = pach
-    ? ['机台', '宝点投币', '码表投币', '差', '返珠率', '收益', '状态', '原因']
-    : ['机台', '上币', '下币', '码表收币', '误差', '状态', '原因'];
+function exportDialog() {
+  const scrim = el('div', 'scrim');
+  const dlg = el('div', 'dlg');
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.appendChild(el('h2', 'dlg__t', '导出核对表'));
+  dlg.appendChild(el('p', 'dlg__d', '选一个区间，导出这期间每天的核对结果'));
 
+  const mk = (label, val) => {
+    const row = el('div', 'exp-row');
+    row.appendChild(el('span', 'exp-label', label));
+    const wrap = el('div', 'pick');
+    const btn = el('button', 'pick__btn');
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'dialog');
+    btn.setAttribute('aria-expanded', 'false');
+    const valEl = el('span', 'pick__val mono');
+    btn.appendChild(valEl);
+    const pop = el('div', 'dp__pop');
+    pop.hidden = true;
+    wrap.appendChild(btn);
+    wrap.appendChild(pop);
+    row.appendChild(wrap);
+    dlg.appendChild(row);
+    let cur = val;
+    const dp = UI.datePicker({
+      btn, pop, valueEl: valEl, value: val, max: S.editDay,
+      onChange: (v) => { cur = v; },
+    });
+    return { get: () => cur, set: (v) => { cur = v; if (dp) dp.set(v); } };
+  };
+
+  const from = mk('开始', S.day);
+  const to = mk('结束', S.day);
+
+  const acts = el('div', 'dlg__acts');
+  const cancel = el('button', 'btn btn--quiet', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => scrim.remove());
+  const go = el('button', 'btn btn--primary', '导出');
+  go.type = 'button';
+  go.addEventListener('click', async () => {
+    go.disabled = true;
+    go.textContent = '生成中';
+    try {
+      await doExport(from.get(), to.get());
+      scrim.remove();
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+      go.disabled = false;
+      go.textContent = '导出';
+    }
+  });
+  acts.appendChild(cancel);
+  acts.appendChild(go);
+  dlg.appendChild(acts);
+  scrim.appendChild(dlg);
+  document.body.appendChild(scrim);
+  go.focus();
+}
+
+async function doExport(fromDay, toDay) {
+  const pach = S.kind === 'pachinko';
+  const d = await api('/api/recon/range?shop_id=' + encodeURIComponent(S.shopId)
+    + '&kind=' + encodeURIComponent(S.kind)
+    + '&from=' + encodeURIComponent(fromDay) + '&to=' + encodeURIComponent(toDay));
+  if (!d.rows.length) throw new Error('这段时间没有数据');
+
+  const head = ['日期', '机台名称', '码表上币', '码表下币', '卡头上币', '卡头下币',
+    '卡头收币', '码表收币', '收币误差', '误差率', '误差原因'];
   const cell = (v) => {
     if (v === null || v === undefined) return '';
-    const s2 = String(v);
-    return /[",\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2;
+    const t = String(v);
+    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
   };
+  const num = (v) => (v === null || v === undefined ? '' : v);
 
   const lines = [head.join(',')];
   d.rows.forEach((r) => {
     const reason = [r.reason, r.reason_note].filter(Boolean).join('：');
-    const row = pach
-      ? [r.name, r.up, r.meter, r.diff,
-         r.p && r.p.rate != null ? (r.p.rate * 100).toFixed(1) + '%' : '',
-         r.p && r.p.profit != null ? r.p.profit : '',
-         r.status, reason]
-      : [r.name, r.up, r.down, r.meter, r.diff, r.status, reason];
-    lines.push(row.map(cell).join(','));
+    const rate = (r.rate === null || r.rate === undefined)
+      ? '' : (r.rate * 100).toFixed(1) + '%';
+    lines.push([
+      r.day, r.name,
+      num(r.meter_in), num(r.meter_out),
+      num(r.up), num(r.down),
+      num(r.head), num(r.meter),
+      num(r.diff), rate, reason,
+    ].map(cell).join(','));
   });
 
   const shop = (S.shops.find((x) => x.id === S.shopId) || {}).name || '门店';
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = '核对_' + shop + '_' + S.day + (pach ? '_弹珠机' : '_推币机') + '.csv';
+  a.download = '核对_' + shop + '_' + d.from + '_' + d.to + (pach ? '_弹珠机' : '_推币机') + '.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast('已导出');
+  toast('已导出 ' + d.rows.length + ' 行');
 }
 
 /* ------------------------------------------------------------ 全链 */
@@ -1491,7 +1556,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
-  $('btnExport').addEventListener('click', exportRecon);
+  $('btnExport').addEventListener('click', exportDialog);
   $('btnConfirm').addEventListener('click', confirmUnits);
   $('btnFetchAll').addEventListener('click', fetchAll);
   $('btnImportShops').addEventListener('click', importShops);

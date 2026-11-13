@@ -903,3 +903,15 @@ body[data-scanning="1"] { overflow: hidden; }
   font-size: var(--text-xs); color: var(--ink-3);
   white-space: normal; overflow-wrap: anywhere;
 }
+
+/* 导出弹窗：起止日期 */
+.exp-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  margin-block-end: var(--space-3);
+}
+.exp-label {
+  inline-size: 3rem; flex: none;
+  font-size: var(--text-sm); color: var(--ink-2);
+}
+.exp-row .pick { flex: 1; }
+.exp-row .pick__btn { inline-size: 100%; justify-content: space-between; }

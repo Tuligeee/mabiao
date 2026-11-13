@@ -1017,6 +1017,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bootstrap())
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
+            if p == "/api/recon/range":
+                return self._send(200, api_recon_range(q))
             if p == "/api/recon":
                 return self._send(200, api_recon(q))
             if p == "/api/units":
@@ -1754,6 +1756,43 @@ def api_recon_note(b) -> dict:
     shop_id = guard_shop(b["shop_id"])
     return recon_note(shop_id, b["day"], int(b["unit_id"]),
                       (b.get("reason") or "").strip(), (b.get("note") or "").strip())
+
+
+def api_recon_range(q) -> dict:
+    """区间核对：一次取多天的行，给导出用。最多 62 天。"""
+    sid = guard_shop((q.get("shop_id") or [meta_get("shop_id")])[0])
+    kind = (q.get("kind") or ["pusher"])[0]
+    start = (q.get("from") or [edit_day()])[0]
+    end = (q.get("to") or [start])[0]
+    d0 = date.fromisoformat(start)
+    d1 = date.fromisoformat(end)
+    if d1 < d0:
+        d0, d1 = d1, d0
+    if (d1 - d0).days > 62:
+        raise RuntimeError("一次最多导 62 天")
+    rows = []
+    d = d0
+    while d <= d1:
+        day = d.isoformat()
+        r = recon(sid, day, kind)
+        for row in r["rows"]:
+            rows.append({
+                "day": day,
+                "name": row["name"],
+                "meter_in": row["meter_in"],
+                "meter_out": row["meter_out"],
+                "up": row["up"],
+                "down": row["down"],
+                "head": row["head"],
+                "meter": row["meter"],
+                "diff": row["diff"],
+                "rate": row["rate"],
+                "status": row["status"],
+                "reason": row.get("reason"),
+                "reason_note": row.get("reason_note"),
+            })
+        d += timedelta(days=1)
+    return {"from": d0.isoformat(), "to": d1.isoformat(), "kind": kind, "rows": rows}
 
 
 def api_recon(q):
