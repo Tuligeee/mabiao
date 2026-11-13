@@ -1213,21 +1213,12 @@ function renderMachineView(card, g) {
 
   const ul = el('ul', 'machine__comms');
   ul.setAttribute('aria-label', g.key + ' 的卡头');
-  if (g.merged) {
-    // 共用码表：一个位置，多个卡头喂同一块表
+  (g.pcomms || []).forEach((x) => {
     const li = el('li', 'chip chip--pos');
-    li.appendChild(el('b', null, 'P1'));
-    li.appendChild(el('span', null, g.comms.join(' · ')));
+    li.appendChild(el('b', null, 'P' + x.p + '：'));
+    li.appendChild(el('span', null, x.comm));
     ul.appendChild(li);
-  } else {
-    g.units.forEach((u, i) => {
-      const li = el('li', 'chip chip--pos');
-      li.appendChild(el('b', null, 'P' + (u.pos || i + 1)));
-      const ids = (u.comms || []).map((x) => (x && x.comm_id) || x);
-      li.appendChild(el('span', null, ids.join(' / ')));
-      ul.appendChild(li);
-    });
-  }
+  });
   card.appendChild(ul);
 
   const foot = el('footer', 'machine__foot');
@@ -1310,8 +1301,10 @@ function renderMachineEdit(card, g) {
 
   const XSvg = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
-  function addChip(val) {
+  function addChip(val, p) {
     const li = el('li', 'chip chip--edit');
+    const pl = el('b', 'chip__p', 'P' + (p || 1) + '：');
+    li.appendChild(pl);
     const inp = el('input', 'chip__in');
     inp.type = 'text';
     inp.inputMode = 'numeric';
@@ -1331,6 +1324,7 @@ function renderMachineEdit(card, g) {
     x.innerHTML = XSvg;
     x.addEventListener('click', () => {
       li.remove();
+      renumber();
       refreshMeta();
       const first = ul.querySelector('.chip__in');
       if (first) first.focus();
@@ -1340,7 +1334,7 @@ function renderMachineEdit(card, g) {
     return inp;
   }
 
-  g.comms.forEach(addChip);
+  g.comms.forEach((c, i) => addChip(c, i + 1));
   card.appendChild(ul);
 
   const addLi = el('li', 'chip chip--add');
@@ -1349,12 +1343,21 @@ function renderMachineEdit(card, g) {
   addBtn.setAttribute('aria-label', '加一个卡头');
   addBtn.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   addBtn.addEventListener('click', () => {
-    const inp = addChip('');
+    const cnt = ul.querySelectorAll('.chip--edit').length;
+    const inp = addChip('', cnt + 1);
+    renumber();
     refreshMeta();
     inp.focus();
   });
   addLi.appendChild(addBtn);
   ul.appendChild(addLi);
+
+  function renumber() {
+    [...ul.querySelectorAll('.chip--edit')].forEach((li, i) => {
+      const b = li.querySelector('.chip__p');
+      if (b) b.textContent = 'P' + (i + 1) + '：';
+    });
+  }
 
   function refreshMeta() {
     const n = ul.querySelectorAll('.chip__in').length;

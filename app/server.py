@@ -1027,9 +1027,7 @@ class Handler(BaseHTTPRequestHandler):
                 m = next((x for x in _machine_groups(u["shop_id"]) if x["code"] == code), None)
                 if not m:
                     return self._send(404, {"error": "no such machine"})
-                sub = " / ".join(
-                    "P%s %s" % (v.get("pos") or i + 1, "/".join(v.get("comms") or []))
-                    for i, v in enumerate(m["units"]))
+                sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
                 png = qr_label_png(code, "%s/?c=%s" % (_qr_origin(), code), m["name"], sub)
                 body = png
                 self.send_response(200)
@@ -1307,8 +1305,12 @@ def _machine_groups(shop_id: str) -> list:
         groups.setdefault((u["kind"] or "pusher", base), []).append(u)
     out = []
     for (kind, base), us in groups.items():
+        # P 位按卡头编：这台机的所有通讯ID排序后依次 P1..Pn。
+        # 共用码表的机台（4 个卡头喂一块表）也是 P1..P4，只是读数只有一份。
+        all_comms = sorted(cid for u in us for cid in (u.get("comms") or []))
         out.append({"kind": kind, "name": base, "units": us,
-                    "code": us[0]["code"], "count": len(us)})
+                    "code": us[0]["code"], "count": len(us),
+                    "pcomms": [{"p": i + 1, "comm": cid} for i, cid in enumerate(all_comms)]})
     return out
 
 
@@ -1405,9 +1407,7 @@ def qr_zip(shop_id: str, codes: list) -> bytes:
             if not m:
                 continue
             url = "%s/?c=%s" % (origin, c)
-            sub = " / ".join(
-                "P%s %s" % (u.get("pos") or i + 1, "/".join(u.get("comms") or []))
-                for i, u in enumerate(m["units"]))
+            sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
             png = qr_label_png(c, url, m["name"], sub)
             base = "%s_%s" % (c, _safe_name(m["name"]))
             name = base + ".png"
@@ -1435,9 +1435,7 @@ def qr_page(shop_id: str, origin: str, pre: str = "") -> str:
     machines = _machine_groups(shop_id)
     cards = []
     for m in machines:
-        sub = " / ".join(
-            "P%s %s" % (u.get("pos") or i + 1, "/".join(u.get("comms") or []))
-            for i, u in enumerate(m["units"]))
+        sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
         cards.append(
             '<label class="qrc">'
             '<input type="checkbox" class="qrc__cb" value="%s">'
@@ -1689,11 +1687,13 @@ def manage_machines(shop_id: str) -> list:
     out = []
     for base, units in groups.items():
         comms = [c["comm_id"] for u in units for c in u["comms"]]
+        all_comms = sorted(str(c) for c in comms)
         out.append({
             "key": base,
             "kind": (units[0].get("kind") or "pusher"),
             "units": units,
             "comms": comms,
+            "pcomms": [{"p": i + 1, "comm": cid} for i, cid in enumerate(all_comms)],
             "heads": len(comms),
             "merged": len(units) == 1 and len(comms) > 1,
             "shared": any(bool(u["shared"]) for u in units),

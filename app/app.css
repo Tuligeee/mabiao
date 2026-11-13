@@ -934,3 +934,9 @@ body[data-scanning="1"] { overflow: hidden; }
   font-variant-numeric: tabular-nums;
 }
 .chip--pos span { font-family: var(--font-mono); color: var(--ink-3); }
+
+/* 编辑态：卡头前面的 P 位 */
+.chip__p {
+  font-weight: var(--weight-medium); color: var(--ink-2);
+  font-variant-numeric: tabular-nums; flex: none;
+}
