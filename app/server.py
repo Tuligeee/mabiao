@@ -1335,28 +1335,41 @@ def _qr_font(size: int, bold: bool = False):
 
 
 def qr_label_png(code: str, url: str, title: str, sub: str) -> bytes:
-    """一张贴纸：上面机台名，中间二维码，下面 P 位和通讯ID。"""
+    """一张贴纸（白底）：机台名 / 系统名+编号 / 二维码 / P位+通讯ID / 提示。"""
     import qrcode
     from PIL import Image, ImageDraw
-    qr = qrcode.QRCode(border=1, box_size=9,
+
+    qr = qrcode.QRCode(border=1, box_size=10,
                        error_correction=qrcode.constants.ERROR_CORRECT_M)
     qr.add_data(url)
     qr.make(fit=True)
     qimg = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qw = qimg.height
 
-    W = max(640, qimg.width + 80)
-    top, bottom = 78, 96
-    H = top + qimg.height + bottom
+    W = 660
+    pad_top, gap1, gap2, tail = 34, 56, 26, 78
+    H = pad_top + gap1 + 42 + qw + gap2 + 44 + tail
     img = Image.new("RGB", (W, H), "white")
-    img.paste(qimg, ((W - qimg.width) // 2, top))
     d = ImageDraw.Draw(img)
-    f1 = _qr_font(38, bold=True)
-    f2 = _qr_font(26)
-    tw = d.textlength(title, font=f1)
-    d.text(((W - tw) / 2, 22), title, fill="black", font=f1)
-    if sub:
-        sw = d.textlength(sub, font=f2)
-        d.text(((W - sw) / 2, top + qimg.height + 26), sub, fill="#3f3f46", font=f2)
+    d.rectangle([0, 0, W - 1, H - 1], outline=(226, 228, 232), width=2)
+
+    f_name = _qr_font(42, bold=True)
+    f_meta = _qr_font(24)
+    f_sub = _qr_font(28, bold=True)
+    f_tip = _qr_font(22)
+
+    def center(text, f, y, fill=(16, 16, 18)):
+        w = d.textlength(text, font=f)
+        d.text(((W - w) / 2, y), text, fill=fill, font=f)
+
+    center(title, f_name, pad_top)
+    center("码表核对 · " + code, f_meta, pad_top + gap1, (110, 110, 118))
+    img.paste(qimg, ((W - qw) // 2, pad_top + gap1 + 42))
+
+    y = pad_top + gap1 + 42 + qw + gap2
+    center(sub, f_sub, y)
+    center("每天关门后扫码填数", f_tip, y + 44, (110, 110, 118))
+
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
