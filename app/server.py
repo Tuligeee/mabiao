@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -1003,14 +1004,51 @@ class Handler(BaseHTTPRequestHandler):
         if p.startswith("/api/") and p != "/api/login" and actor() is None:
             return self._send(401, {"error": "未登录"})
         try:
+            if p.endswith("/qr/img"):
+                from urllib.parse import parse_qs as _pqs
+                code = (q.get("c") or [""])[0]
+                with conn() as c:
+                    u = c.execute("SELECT * FROM units WHERE code=?", (code,)).fetchone()
+                if not u:
+                    return self._send(404, {"error": "no such code"})
+                guard_shop(u["shop_id"])
+                m = next((x for x in _machine_groups(u["shop_id"]) if x["code"] == code), None)
+                if not m:
+                    return self._send(404, {"error": "no such machine"})
+                sub = " / ".join(
+                    "P%s %s" % (v.get("pos") or i + 1, "/".join(v.get("comms") or []))
+                    for i, v in enumerate(m["units"]))
+                png = qr_label_png(code, "%s/?c=%s" % (_qr_origin(), code), m["name"], sub)
+                body = png
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=600")
+                self.end_headers()
+                self.wfile.write(body)
+                return None
+
+            if p.endswith("/qr/zip"):
+                shop_id = guard_shop((q.get("shop_id") or [""])[0])
+                codes = [x for x in (q.get("codes") or [""])[0].split(",") if x]
+                body = qr_zip(shop_id, codes)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition",
+                                 "attachment; filename=mabiao-qr.zip")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return None
+
             if p.endswith("/qr"):
+                pre = (self.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
                 if PUBLIC_BASE:
                     origin = PUBLIC_BASE
                 else:
-                    pre = (self.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
                     proto = self.headers.get("X-Forwarded-Proto") or "https"
                     origin = proto + "://" + (self.headers.get("Host") or "127.0.0.1:8899") + pre
-                html = qr_page((q.get("shop_id") or [""])[0], origin)
+                html = qr_page((q.get("shop_id") or [""])[0], origin, pre)
                 return self._send(200, html, "text/html; charset=utf-8")
             if p == "/api/unit":
                 return self._send(200, api_unit(q))
@@ -1262,47 +1300,188 @@ def _machine_groups(shop_id: str) -> list:
     return out
 
 
-def qr_page(shop_id: str, origin: str) -> str:
-    """打印页：一台机一个二维码，标签上标明 P1..Pn 分别是哪个通讯ID。"""
-    from urllib.parse import quote as _q
+_QR_FONT_CACHE = {}
+
+
+def _qr_font(size: int, bold: bool = False):
+    """找一个中文字体，找不到退回默认。"""
+    key = (size, bold)
+    if key in _QR_FONT_CACHE:
+        return _QR_FONT_CACHE[key]
+    from PIL import ImageFont
+    import glob
+    pats = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-%s.ttc" % ("Bold" if bold else "Regular"),
+        "/usr/share/fonts/opentype/noto/NotoSerifCJK-%s.ttc" % ("Bold" if bold else "Regular"),
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-%s.ttc" % ("Bold" if bold else "Regular"),
+    ]
+    cand = []
+    for p0 in pats:
+        if os.path.exists(p0):
+            cand.append(p0)
+    if not cand:
+        cand = glob.glob("/usr/share/fonts/**/*CJK*", recursive=True)
+    f = None
+    for p0 in cand:
+        try:
+            f = ImageFont.truetype(p0, size)
+            break
+        except Exception:
+            continue
+    if f is None:
+        f = ImageFont.load_default()
+    _QR_FONT_CACHE[key] = f
+    return f
+
+
+def qr_label_png(code: str, url: str, title: str, sub: str) -> bytes:
+    """一张贴纸：上面机台名，中间二维码，下面 P 位和通讯ID。"""
+    import qrcode
+    from PIL import Image, ImageDraw
+    qr = qrcode.QRCode(border=1, box_size=9,
+                       error_correction=qrcode.constants.ERROR_CORRECT_M)
+    qr.add_data(url)
+    qr.make(fit=True)
+    qimg = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+    W = max(640, qimg.width + 80)
+    top, bottom = 78, 96
+    H = top + qimg.height + bottom
+    img = Image.new("RGB", (W, H), "white")
+    img.paste(qimg, ((W - qimg.width) // 2, top))
+    d = ImageDraw.Draw(img)
+    f1 = _qr_font(38, bold=True)
+    f2 = _qr_font(26)
+    tw = d.textlength(title, font=f1)
+    d.text(((W - tw) / 2, 22), title, fill="black", font=f1)
+    if sub:
+        sw = d.textlength(sub, font=f2)
+        d.text(((W - sw) / 2, top + qimg.height + 26), sub, fill="#3f3f46", font=f2)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _safe_name(s: str) -> str:
+    return re.sub(r'[\\/:*?"<>|\s]+', "_", s).strip("_")
+
+
+def qr_zip(shop_id: str, codes: list) -> bytes:
+    """把选中的机台二维码打成 zip。"""
+    import zipfile
+    machines = _machine_groups(shop_id)
+    by_code = {m["code"]: m for m in machines if m.get("code")}
+    origin = _qr_origin()
+    buf = io.BytesIO()
+    used = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for c in codes:
+            m = by_code.get(c)
+            if not m:
+                continue
+            url = "%s/?c=%s" % (origin, c)
+            sub = " / ".join(
+                "P%s %s" % (u.get("pos") or i + 1, "/".join(u.get("comms") or []))
+                for i, u in enumerate(m["units"]))
+            png = qr_label_png(c, url, m["name"], sub)
+            base = "%s_%s" % (c, _safe_name(m["name"]))
+            name = base + ".png"
+            k = 2
+            while name in used:
+                name = "%s_%d.png" % (base, k)
+                k += 1
+            used.add(name)
+            z.writestr(name, png)
+    return buf.getvalue()
+
+
+def _qr_origin() -> str:
+    """二维码里编的对外地址。"""
+    if PUBLIC_BASE:
+        return PUBLIC_BASE
+    return "http://127.0.0.1:8899"
+
+
+def qr_page(shop_id: str, origin: str, pre: str = "") -> str:
+    """二维码页：一台机一张图，可勾选，下载成 zip。"""
     shop_id = guard_shop(shop_id)
     with conn() as c:
         shop = c.execute("SELECT id,name,code FROM shops WHERE id=?", (shop_id,)).fetchone()
     machines = _machine_groups(shop_id)
     cards = []
     for m in machines:
-        url = "%s/?c=%s" % (origin, m["code"])
-        img = ("https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=2&data="
-               + _q(url, safe=""))
-        if len(m["units"]) > 1:
-            lines = "".join(
-                "<span>P%s %s</span>" % (u.get("pos") or (i + 1), "/".join(u["comms"]) or "-")
-                for i, u in enumerate(m["units"]))
-        else:
-            lines = "<span>%s</span>" % ("/".join(m["units"][0]["comms"]) or "-")
+        sub = " / ".join(
+            "P%s %s" % (u.get("pos") or i + 1, "/".join(u.get("comms") or []))
+            for i, u in enumerate(m["units"]))
         cards.append(
-            '<figure class="qr">'
-            '<figcaption class="qr__t"><b>%s</b></figcaption>'
-            '<img src="%s" alt="%s" width="260" height="260">'
-            '<figcaption class="qr__ids">%s</figcaption>'
-            '</figure>' % (m["name"], img, url, lines))
+            '<label class="qrc">'
+            '<input type="checkbox" class="qrc__cb" value="%s">'
+            '<img src="qr/img?c=%s" alt="%s" loading="lazy">'
+            '<span class="qrc__t">%s</span>'
+            '<span class="qrc__s">%s</span>'
+            '</label>' % (m["code"], m["code"], m["name"], m["name"], sub))
     return """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>机台二维码 · %s</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>机台二维码 · %(shop)s</title>
 <style>
- body{margin:0;padding:24px;font:14px/1.45 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#101012;background:#fff}
+ body{margin:0;padding:24px 24px 96px;font:14px/1.45 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#101012;background:#f6f7f9}
  h1{font-size:20px;margin:0 0 4px}
- p.hint{color:#6B6B73;margin:0 0 20px;font-size:13px}
- .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
- .qr{margin:0;padding:12px 10px;border:1px solid #E8E8EB;border-radius:10px;text-align:center;break-inside:avoid}
- .qr__t{font-size:15px;font-weight:600;margin-bottom:6px}
- .qr img{display:block;margin:0 auto 6px;width:100%%;height:auto;max-width:260px}
- .qr__ids{display:flex;flex-direction:column;gap:2px;font-size:11px;color:#55555C;font-family:ui-monospace,Consolas,monospace}
- @media print{body{padding:0}.qr{border-color:#ccc}}
+ p.hint{color:#6B6B73;margin:0 0 16px;font-size:13px}
+ .bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;
+      padding:10px 0 12px;background:#f6f7f9}
+ .bar label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f3f46;cursor:pointer}
+ .bar .n{font-size:13px;color:#6B6B73}
+ .bar button{margin-left:auto;font:inherit;font-size:13px;font-weight:600;color:#fff;
+      background:#1d4ed8;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
+ .bar button:disabled{background:#c7c9ce;cursor:not-allowed}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+ .qrc{position:relative;display:block;padding:10px;background:#fff;border:1px solid #e5e7eb;
+      border-radius:10px;text-align:center;cursor:pointer}
+ .qrc:has(input:checked){border-color:#1d4ed8;box-shadow:0 0 0 1px #1d4ed8}
+ .qrc__cb{position:absolute;top:8px;left:8px;inline-size:16px;block-size:16px}
+ .qrc img{display:block;width:100%%;height:auto;border-radius:6px}
+ .qrc__t{display:block;margin-top:6px;font-size:13px;font-weight:600}
+ .qrc__s{display:block;margin-top:2px;font-size:11px;color:#6B6B73;
+      font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+ @media print{body{padding:0}.bar{display:none}.grid{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
-<h1>%s · 机台二维码</h1>
-<p class="hint">共 %d 台机。一台一个码，扫码后填这台机的全部码表。</p>
-<div class="grid">%s</div>
-</body></html>""" % (shop["name"], shop["name"], len(machines), "".join(cards))
+<h1>%(shop)s · 机台二维码</h1>
+<p class="hint">共 %(n)d 台。勾选要用的，下载成压缩包；二维码里编的是机台编号，改名字换卡头都不用重贴。</p>
+<div class="bar">
+  <label><input type="checkbox" id="all"> 全选</label>
+  <span class="n" id="cnt">已选 0 台</span>
+  <button type="button" id="dl" disabled>下载选中</button>
+</div>
+<div class="grid">%(cards)s</div>
+<script>
+(function(){
+  var cbs = [].slice.call(document.querySelectorAll('.qrc__cb'));
+  var all = document.getElementById('all');
+  var cnt = document.getElementById('cnt');
+  var dl = document.getElementById('dl');
+  function sync(){
+    var n = cbs.filter(function(x){return x.checked;}).length;
+    cnt.textContent = '已选 ' + n + ' 台';
+    dl.disabled = n === 0;
+    all.checked = n === cbs.length && n > 0;
+    all.indeterminate = n > 0 && n < cbs.length;
+  }
+  cbs.forEach(function(x){ x.addEventListener('change', sync); });
+  all.addEventListener('change', function(){
+    cbs.forEach(function(x){ x.checked = all.checked; });
+    sync();
+  });
+  dl.addEventListener('click', function(){
+    var codes = cbs.filter(function(x){return x.checked;}).map(function(x){return x.value;});
+    if (!codes.length) return;
+    location.href = 'qr/zip?shop_id=%(sid)s&codes=' + encodeURIComponent(codes.join(','));
+  });
+  sync();
+})();
+</script>
+</body></html>""" % {"shop": shop["name"], "n": len(machines), "cards": "".join(cards),
+                       "pre": pre, "sid": shop_id}
+
 
 
 def api_unit(q) -> dict:

@@ -32,3 +32,6 @@ Thumbs.db
 _*.conf
 _*.py
 
+
+_sample_*.png
+
