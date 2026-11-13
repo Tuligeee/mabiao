@@ -777,7 +777,11 @@ function reasonDialog(r) {
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
   cancel.type = 'button';
-  cancel.addEventListener('click', () => scrim.remove());
+  const closeAll = () => {
+    pops.forEach((p) => p.remove());
+    scrim.remove();
+  };
+  cancel.addEventListener('click', closeAll);
   const save = el('button', 'btn btn--primary', '保存');
   save.type = 'button';
   save.addEventListener('click', async () => {
@@ -824,27 +828,44 @@ function exportDialog() {
     btn.setAttribute('aria-expanded', 'false');
     const valEl = el('span', 'pick__val mono');
     btn.appendChild(valEl);
-    const pop = el('div', 'dp__pop');
-    pop.hidden = true;
     wrap.appendChild(btn);
-    wrap.appendChild(pop);
     row.appendChild(wrap);
     dlg.appendChild(row);
+
+    // 日期面板挂到 body 上，避免被弹窗的滚动容器裁掉
+    const pop = el('div', 'dp__pop');
+    pop.hidden = true;
+    pop.style.position = 'fixed';
+    pop.style.zIndex = '80';
+    document.body.appendChild(pop);
+    btn.addEventListener('click', () => {
+      const r = btn.getBoundingClientRect();
+      const w = 300;
+      pop.style.top = Math.round(r.bottom + 4) + 'px';
+      pop.style.left = Math.round(Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    });
+
     let cur = val;
     const dp = UI.datePicker({
       btn, pop, valueEl: valEl, value: val, max: S.editDay,
       onChange: (v) => { cur = v; },
     });
+    pops.push(pop);
     return { get: () => cur, set: (v) => { cur = v; if (dp) dp.set(v); } };
   };
 
+  const pops = [];
   const from = mk('开始', S.day);
   const to = mk('结束', S.day);
 
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
   cancel.type = 'button';
-  cancel.addEventListener('click', () => scrim.remove());
+  const closeAll = () => {
+    pops.forEach((p) => p.remove());
+    scrim.remove();
+  };
+  cancel.addEventListener('click', closeAll);
   const go = el('button', 'btn btn--primary', '导出');
   go.type = 'button';
   go.addEventListener('click', async () => {
@@ -852,7 +873,7 @@ function exportDialog() {
     go.textContent = '生成中';
     try {
       await doExport(from.get(), to.get());
-      scrim.remove();
+      closeAll();
     } catch (e) {
       toast(String(e.message || e), 'bad');
       go.disabled = false;
