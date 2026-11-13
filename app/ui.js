@@ -277,5 +277,115 @@ const UI = (() => {
     timer = setTimeout(() => { t.hidden = true; }, 4000);
   }
 
-  return { picker, datePicker, confirm, toast, el, iso, CHEV };
+  function dateRangePicker({ btn, pop, valueEl, from, to, max, onChange }) {
+    let cur = from ? new Date(from + 'T00:00:00') : new Date();
+    cur.setDate(1);
+    let start = from || '';
+    let end = to || '';
+    let picking = false;
+
+    function label() {
+      if (!start) return '选择区间';
+      return end ? (start + ' ~ ' + end) : (start + ' ~ …');
+    }
+
+    function close() {
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', outside, true);
+    }
+    function outside(e) {
+      if (!pop.contains(e.target) && !btn.contains(e.target)) close();
+    }
+
+    function pick(v) {
+      if (!picking || !start) {
+        start = v;
+        end = '';
+        picking = true;
+      } else {
+        end = v;
+        if (end < start) { const t = start; start = end; end = t; }
+        picking = false;
+        valueEl.textContent = label();
+        close();
+        onChange(start, end);
+        btn.focus();
+      }
+      valueEl.textContent = label();
+      render();
+    }
+
+    function render() {
+      pop.innerHTML = '';
+      const head = el('div', 'dp__head');
+      const prev = el('button', 'dp__nav');
+      prev.type = 'button';
+      prev.setAttribute('aria-label', '上个月');
+      prev.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M12 5 7 10l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      prev.addEventListener('click', () => { cur.setMonth(cur.getMonth() - 1); render(); });
+      const next = el('button', 'dp__nav');
+      next.type = 'button';
+      next.setAttribute('aria-label', '下个月');
+      next.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M8 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      next.addEventListener('click', () => { cur.setMonth(cur.getMonth() + 1); render(); });
+      head.appendChild(prev);
+      head.appendChild(el('span', 'dp__title', cur.getFullYear() + ' 年 ' + (cur.getMonth() + 1) + ' 月'));
+      head.appendChild(next);
+      pop.appendChild(head);
+
+      const grid = el('div', 'dp__grid');
+      WEEK.forEach((w) => grid.appendChild(el('span', 'dp__wd', w)));
+      const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
+      const offset = (first.getDay() + 6) % 7;
+      const days = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
+      for (let i = 0; i < offset; i++) grid.appendChild(el('span', 'dp__day', ''));
+
+      for (let d = 1; d <= days; d++) {
+        const v = iso(new Date(cur.getFullYear(), cur.getMonth(), d));
+        const b = el('button', 'dp__day', String(d));
+        b.type = 'button';
+        b.dataset.iso = v;
+        if (v === start) b.setAttribute('aria-selected', 'true');
+        if (v === end) b.dataset.edge = 'true';
+        if (start && end && v > start && v < end) b.dataset.in = 'true';
+        if (max && v > max) {
+          b.disabled = true;
+          b.dataset.off = 'true';
+          b.setAttribute('aria-disabled', 'true');
+          grid.appendChild(b);
+          continue;
+        }
+        b.addEventListener('click', () => pick(v));
+        grid.appendChild(b);
+      }
+      pop.appendChild(grid);
+
+      const foot = el('div', 'dp__foot');
+      const hint = el('span', 'dp__hint', picking ? '再点一天作为结束' : '点一天开始');
+      foot.appendChild(hint);
+      pop.appendChild(foot);
+    }
+
+    function open() {
+      if (start) { cur = new Date(start + 'T00:00:00'); cur.setDate(1); }
+      picking = !start || !end;
+      if (start && end) { picking = true; end = ''; }
+      render();
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      setTimeout(() => document.addEventListener('click', outside, true), 0);
+    }
+
+    btn.addEventListener('click', () => (pop.hidden ? open() : close()));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pop.hidden) open(); }
+      if (e.key === 'Escape') close();
+    });
+
+    valueEl.textContent = label();
+    return { set(a, b) { start = a; end = b || ''; valueEl.textContent = label(); } };
+  }
+
+  return { picker, datePicker, dateRangePicker, confirm, toast, el, iso, CHEV };
 })();

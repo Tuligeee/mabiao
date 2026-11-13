@@ -915,3 +915,14 @@ body[data-scanning="1"] { overflow: hidden; }
 }
 .exp-row .pick { flex: 1; }
 .exp-row .pick__btn { inline-size: 100%; justify-content: space-between; }
+
+/* 区间选择：中间那段浅色带 */
+.dp__day[data-in="true"] {
+  background: var(--accent-bg); color: var(--accent);
+  border-radius: 0;
+}
+.dp__day[data-edge="true"] {
+  background: var(--accent-bg); color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.dp__hint { font-size: var(--text-xs); color: var(--ink-3); }
