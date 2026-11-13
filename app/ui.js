@@ -27,6 +27,7 @@ const UI = (() => {
       document.removeEventListener('click', outside, true);
     }
     function outside(e) {
+      if (!document.contains(e.target)) return;
       if (!pop.contains(e.target) && !btn.contains(e.target)) close();
     }
     function open() {
@@ -295,6 +296,9 @@ const UI = (() => {
       document.removeEventListener('click', outside, true);
     }
     function outside(e) {
+      // 刚点的那一格可能已经被重绘替换掉，此时 e.target 已脱离文档，
+      // 不能当成「点了外面」，否则选第一下就自动关闭。
+      if (!document.contains(e.target)) return;
       if (!pop.contains(e.target) && !btn.contains(e.target)) close();
     }
 
