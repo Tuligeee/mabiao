@@ -122,11 +122,16 @@ def ensure_codes():
             c.execute("UPDATE shops SET code=? WHERE id=?", ("S%02d" % k, r["id"]))
             used.add("S%02d" % k)
 
-        # 码表编号 {门店编号}-{序号}
+        # 码表编号 {门店编号}-{序号}：从这家店已有的最大序号往后接，
+        # 否则新增/拆分出来的机台会拿到已经被占用的编号（曾撞过一次）
         shops = {r["id"]: r["code"] for r in c.execute("SELECT id, code FROM shops")}
+        seq = {}
+        for r in c.execute("SELECT shop_id, code FROM units WHERE code IS NOT NULL AND code<>''"):
+            m = re.match(r".*-(\d+)$", r["code"] or "")
+            if m:
+                seq[r["shop_id"]] = max(seq.get(r["shop_id"], 0), int(m.group(1)))
         rows = [dict(r) for r in c.execute(
             "SELECT id, shop_id FROM units WHERE code IS NULL OR code='' ORDER BY shop_id, id")]
-        seq = {}
         for r in rows:
             k2 = seq.get(r["shop_id"], 0) + 1
             seq[r["shop_id"]] = k2
@@ -1098,16 +1103,23 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/api/manage/shop/remove":
                 return self._send(200, remove_shop(b["id"]))
             if p == "/api/manage/unit/save":
-                return self._send(200, save_unit(b))
+                r = save_unit(b)
+                ensure_codes()
+                return self._send(200, r)
             if p == "/api/manage/unit/split":
-                return self._send(200, split_unit(int(b["id"])))
+                r = split_unit(int(b["id"]))
+                ensure_codes()
+                return self._send(200, r)
             if p == "/api/manage/machine/save":
                 return self._send(200, save_machine(b))
             if p == "/api/manage/unit/merge":
-                return self._send(200, merge_units(b["shop_id"], b.get("ids") or [],
-                                                   b.get("name") or ""))
+                r = merge_units(b["shop_id"], b.get("ids") or [], b.get("name") or "")
+                ensure_codes()
+                return self._send(200, r)
             if p == "/api/manage/unit/remove":
-                return self._send(200, remove_unit(int(b["id"])))
+                r = remove_unit(int(b["id"]))
+                ensure_codes()
+                return self._send(200, r)
             if p == "/api/setup/shops":
                 r = sync_all_shops()
                 return self._send(200, {"ok": True, **r})
