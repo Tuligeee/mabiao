@@ -392,7 +392,8 @@ async function loadEntry() {
     return;
   }
   $('entryLede').textContent = (S.kind === 'pachinko' ? '弹珠机' : '推币机')
-    + ' · ' + S.entry.length + ' 台 · 每台填两个累计读数，回车跳下一个'
+    + ' · ' + S.entry.length + ' 台'
+    + (S.kind === 'pachinko' ? ' · 每台填四个数，回车跳下一个' : ' · 每台填两个累计读数，回车跳下一个')
     + (S.role === 'store' ? ' · 填的是 ' + S.day + ' 关门时的数' : '');
   if (!S.confirmed) {
     $('confirmPanel').hidden = false;
@@ -1492,17 +1493,19 @@ async function boot() {
     return;
   }
 
-  const scanCode = new URLSearchParams(location.search).get('c');
-  if (scanCode) {
-    document.body.dataset.scan = '1';
-    await loadScan(scanCode);
-    return;
-  }
-  const scanId = new URLSearchParams(location.search).get('u');
-  if (scanId) {
-    document.body.dataset.scan = '1';
-    await loadScan(null, scanId);
-    return;
+  // 扫机台码进来：不直达单台机，落到它所在的机台列表，再高亮那一台。
+  const qsScan = new URLSearchParams(location.search);
+  const scanCode = qsScan.get('c');
+  const scanId = qsScan.get('u');
+  let scanHit = null;
+  if (scanCode || scanId) {
+    try {
+      scanHit = await api('/api/unit?' + (scanCode
+        ? 'c=' + encodeURIComponent(scanCode)
+        : 'id=' + encodeURIComponent(scanId)));
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+    }
   }
 
   const b = await api('/api/bootstrap');
@@ -1563,6 +1566,18 @@ async function boot() {
 
   applyRole();
   if (!b.units_confirmed) welcomeDialog(b);
+
+  if (scanHit) {
+    if (S.role === 'hq' && scanHit.shop && scanHit.shop.id) {
+      S.shopId = scanHit.shop.id;
+      const sp = S.shops.find((x) => x.id === S.shopId);
+      shopPicker.set(sp ? sp.name : (scanHit.shop.name || ''));
+    }
+    S.kind = scanHit.kind;
+    const firstRow = (scanHit.rows || [])[0];
+    if (firstRow) S.pendingUnit = firstRow.unit_id;
+    history.replaceState(null, '', location.pathname);
+  }
 
   if (S.pendingUnit) {
     setView('entry');
