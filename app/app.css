@@ -940,3 +940,18 @@ body[data-scanning="1"] { overflow: hidden; }
   font-weight: var(--weight-medium); color: var(--ink-2);
   font-variant-numeric: tabular-nums; flex: none;
 }
+
+/* 机型切换 */
+.seg {
+  display: inline-flex; gap: 2px; margin-block-start: var(--space-3);
+  padding: 3px; background: var(--hover); border-radius: var(--radius-full);
+}
+.seg__b {
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium);
+  color: var(--ink-2); background: transparent; border: 0; cursor: pointer;
+  padding: 6px 16px; border-radius: var(--radius-full);
+}
+.seg__b[aria-selected="true"] {
+  color: var(--ink); background: var(--card);
+  box-shadow: var(--shadow-sm);
+}

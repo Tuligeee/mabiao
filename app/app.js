@@ -661,13 +661,17 @@ function renderRecon() {
   $('fMeta').textContent = `${s.ok} 台可核对 · 含异常合计 ${fmt1(s.diff_all)} · 误差超千 ${s.big} 台`;
 
   const pach = S.kind === 'pachinko';
+  document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
+    b.setAttribute('aria-selected', b.dataset.kind === S.kind ? 'true' : 'false');
+  });
 
   const head = $('reconHead');
   head.innerHTML = '';
   const hr = el('tr');
   const cols = pach
     ? [['机台', ''], ['宝点投币', 'num'], ['码表投币', 'num'], ['差', 'num'],
-       ['返珠率', 'num'], ['收益', 'num'], ['状态', ''], ['原因', '']]
+       ['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
+       ['返珠率', 'num'], ['状态', ''], ['原因', '']]
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
@@ -692,12 +696,13 @@ function renderRecon() {
       const td = el('td', 'num lead', fmt(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
       tr.appendChild(td);
+      tr.appendChild(el('td', 'num', pm.paid === null || pm.paid === undefined ? '-' : fmt(pm.paid)));
+      tr.appendChild(el('td', 'num', pm.win === null || pm.win === undefined ? '-' : fmt(pm.win)));
+      const kp = el('td', 'num lead', pm.keep === null || pm.keep === undefined ? '-' : fmt(pm.keep));
+      if (pm.keep !== null && pm.keep !== undefined && pm.keep < 0) kp.dataset.tone = 'bad';
+      tr.appendChild(kp);
       tr.appendChild(el('td', 'num',
         pm.rate === null || pm.rate === undefined ? '-' : (pm.rate * 100).toFixed(1) + '%'));
-      const pr = el('td', 'num lead', pm.profit === null || pm.profit === undefined
-        ? '-' : fmt1(pm.profit));
-      if (pm.profit !== null && pm.profit !== undefined && pm.profit < 0) pr.dataset.tone = 'bad';
-      tr.appendChild(pr);
     } else {
       tr.appendChild(el('td', 'num', fmt(r.up)));
       tr.appendChild(el('td', 'num', fmt(r.down)));
@@ -889,8 +894,11 @@ async function doExport(fromDay, toDay) {
     + '&from=' + encodeURIComponent(fromDay) + '&to=' + encodeURIComponent(toDay));
   if (!d.rows.length) throw new Error('这段时间没有数据');
 
-  const head = ['日期', '机台名称', '码表上币', '码表下币', '卡头上币', '卡头下币',
-    '卡头收币', '码表收币', '收币误差', '误差率', '误差原因'];
+  const head = pach
+    ? ['日期', '机台名称', '宝点投币', '码表投币', '差',
+       '投币出珠', '中奖出珠', '实际收珠', '返珠率', '误差原因']
+    : ['日期', '机台名称', '码表上币', '码表下币', '卡头上币', '卡头下币',
+       '卡头收币', '码表收币', '收币误差', '误差率', '误差原因'];
   const cell = (v) => {
     if (v === null || v === undefined) return '';
     const t = String(v);
@@ -903,13 +911,15 @@ async function doExport(fromDay, toDay) {
     const reason = [r.reason, r.reason_note].filter(Boolean).join('：');
     const rate = (r.rate === null || r.rate === undefined)
       ? '' : (r.rate * 100).toFixed(1) + '%';
-    lines.push([
-      r.day, r.name,
-      num(r.meter_in), num(r.meter_out),
-      num(r.up), num(r.down),
-      num(r.head), num(r.meter),
-      num(r.diff), rate, reason,
-    ].map(cell).join(','));
+    const row = pach
+      ? [r.day, r.name, num(r.up), num(r.meter), num(r.diff),
+         num(r.paid), num(r.win), num(r.keep), rate, reason]
+      : [r.day, r.name,
+         num(r.meter_in), num(r.meter_out),
+         num(r.up), num(r.down),
+         num(r.head), num(r.meter),
+         num(r.diff), rate, reason];
+    lines.push(row.map(cell).join(','));
   });
 
   const shop = (S.shops.find((x) => x.id === S.shopId) || {}).name || '门店';
@@ -1168,25 +1178,18 @@ function pachinkoCfg() {
     return inp;
   };
 
-  const bead = mk('珠值', 'bead_value', '0.022');
-  const card = mk('卡片价值', 'card_value', '0.01785');
   const per = mk('一币 = 几珠', 'beads_per_coin', '20');
 
   const btn = el('button', 'btn btn--sm btn--primary', '保存参数');
   btn.type = 'button';
   btn.addEventListener('click', async () => {
-    const b = parseFloat(bead.value);
-    const c = parseFloat(card.value);
     const q = parseFloat(per.value);
-    if (!isFinite(b) || !isFinite(c)) { toast('珠值和卡片价值都要填数字', 'bad'); return; }
     if (!isFinite(q) || q <= 0) { toast('「一币 = 几珠」要填大于 0 的数字', 'bad'); return; }
     btn.disabled = true;
     try {
       await api('/api/manage/shop/values', {
-        shop_id: MSHOP.id, bead_value: b, card_value: c, beads_per_coin: q,
+        shop_id: MSHOP.id, beads_per_coin: q,
       });
-      MSHOP.bead_value = b;
-      MSHOP.card_value = c;
       MSHOP.beads_per_coin = q;
       toast('参数已保存');
     } catch (e) {
@@ -1607,6 +1610,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
   $('btnExport').addEventListener('click', exportDialog);
+  document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
+    b.addEventListener('click', async () => {
+      if (S.kind === b.dataset.kind) return;
+      S.kind = b.dataset.kind;
+      await loadRecon();
+    });
+  });
   $('btnConfirm').addEventListener('click', confirmUnits);
   $('btnFetchAll').addEventListener('click', fetchAll);
   $('btnImportShops').addEventListener('click', importShops);

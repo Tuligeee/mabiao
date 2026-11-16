@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
-<link rel="stylesheet" href="theme.css?v=51">
-<link rel="stylesheet" href="app.css?v=51">
+<link rel="stylesheet" href="theme.css?v=52">
+<link rel="stylesheet" href="app.css?v=52">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
@@ -147,6 +147,10 @@
         <p class="eyebrow">核对</p>
         <h1 class="h1">收币误差</h1>
         <p class="lede" id="reconLede">卡头收币 减 码表收币</p>
+        <div class="seg" id="reconKind" role="tablist" aria-label="机型">
+          <button class="seg__b" type="button" role="tab" data-kind="pusher">推币机</button>
+          <button class="seg__b" type="button" role="tab" data-kind="pachinko">弹珠机</button>
+        </div>
         <button class="btn btn--sm recon-export" type="button" id="btnExport">导出表格</button>
       </div>
 
@@ -260,7 +264,7 @@
 </div>
 
 <script src="vendor/jsQR.js"></script>
-  <script src="ui.js?v=51"></script>
-<script src="app.js?v=51"></script>
+  <script src="ui.js?v=52"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>
