@@ -1407,9 +1407,9 @@ function renderMachineView(card, g) {
 
   const foot = el('footer', 'machine__foot');
 
-  const edit = el('button', 'btn btn--sm', '改');
+  const edit = el('button', 'btn btn--sm', '编辑');
   edit.type = 'button';
-  edit.setAttribute('aria-label', '改机台 ' + g.key);
+  edit.setAttribute('aria-label', '编辑机台 ' + g.key);
   edit.addEventListener('click', () => { EDIT_KEY = g.key; renderUnits(); });
   foot.appendChild(edit);
 

@@ -1060,3 +1060,15 @@ body[data-scanning="1"] { overflow: hidden; }
   font-size: var(--text-sm); min-inline-size: 9ch;
 }
 .chip--edit .chip__x { align-self: center; margin-inline-end: var(--space-2); }
+
+/* 加号按钮和卡头格等高居中 */
+.mf__chips { align-items: center; }
+.mf__chips .chip--add {
+  block-size: 2.5rem; inline-size: 2.5rem;
+  display: grid; place-items: center;
+}
+.mf__chips .chip__add {
+  block-size: 100%; inline-size: 100%;
+  display: grid; place-items: center;
+  border: 0; background: transparent;
+}
