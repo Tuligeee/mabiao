@@ -1072,3 +1072,10 @@ body[data-scanning="1"] { overflow: hidden; }
   display: grid; place-items: center;
   border: 0; background: transparent;
 }
+
+/* 机台名后面的通讯ID：小字、等宽、留白 */
+.lrow__comm {
+  margin-inline-start: var(--space-2);
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--ink-3); letter-spacing: 0.02em;
+}

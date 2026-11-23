@@ -395,10 +395,16 @@ async function loadEntry() {
     $('entryLede').textContent = '这家店没有参与核对的机台，去设置里加';
     return;
   }
-  $('entryLede').textContent = (S.kind === 'pachinko' ? '弹珠机' : '推币机')
-    + ' · ' + S.entry.length + ' 台'
-    + (S.kind === 'pachinko' ? ' · 每台填四个数，回车跳下一个' : ' · 每台填两个累计读数，回车跳下一个')
-    + (S.role === 'store' ? ' · 填的是 ' + S.day + ' 关门时的数' : '');
+  const bits = [S.kind === 'pachinko' ? '弹珠机' : '推币机', S.entry.length + ' 台'];
+  if (S.kind === 'pachinko') {
+    const ns = [...new Set(S.entry.map((r) => (r.fields || []).length))].filter((x) => x > 0);
+    if (ns.length === 1) bits.push('每台填 ' + ns[0] + ' 个数');
+    else if (ns.length > 1) bits.push('每台填 ' + Math.min(...ns) + '~' + Math.max(...ns) + ' 个数');
+  } else {
+    bits.push('每台填 2 个累计读数');
+  }
+  if (S.role === 'store') bits.push(S.day + ' 关门');
+  $('entryLede').textContent = bits.join(' · ');
   if (!S.confirmed) {
     $('confirmPanel').hidden = false;
     $('entryList').hidden = true;
@@ -467,7 +473,13 @@ function renderEntry() {
 
     const id = el('div', 'lrow__id');
     if (r.pos) id.appendChild(el('span', 'lrow__pos', 'P' + r.pos));
-    id.appendChild(el('span', 'lrow__name', r.name));
+    const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
+    if (nm) {
+      id.appendChild(el('span', 'lrow__name', nm[1]));
+      id.appendChild(el('span', 'lrow__comm', nm[2]));
+    } else {
+      id.appendChild(el('span', 'lrow__name', r.name));
+    }
     if (r.shared || r.comm_count > 1) {
       id.appendChild(el('span', 'lrow__meta', r.shared ? '共用码表' : r.comm_count + ' 个卡头'));
     }
