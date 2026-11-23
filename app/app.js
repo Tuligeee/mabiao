@@ -2,6 +2,7 @@
 
 const S = {
   role: 'store', me: null, kind: 'pusher', pendingUnit: null, scan: null,
+  brand: null, brandFlags: null,
   shopId: null, day: null, view: 'entry',
   shops: [], units: [], entry: [], allRows: [], confirmed: false,
   recon: null, setup: null, bdOk: true,
@@ -279,10 +280,13 @@ async function loadScan(code, id) {
     const inputs = el('div', 'scan__inputs');
     const noop = () => {};
     if (d.kind === 'pachinko') {
-      inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in', noop));
-      inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens', noop));
-      inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total', noop));
-      inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards', noop));
+      const bf0 = S.brandFlags || {};
+      if (bf0.coin !== 0) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in', noop));
+      if (bf0.bead !== 0) {
+        inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens', noop));
+        inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total', noop));
+      }
+      if (bf0.card !== 0) inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards', noop));
     } else {
       inputs.appendChild(makeCell(r, 'in_r', '入', 'prev_in', noop));
       inputs.appendChild(makeCell(r, 'out_r', '出', 'prev_out', noop));
@@ -477,10 +481,13 @@ function renderEntry() {
 
     const inputs = el('div', 'lrow__inputs');
     if (r.kind === 'pachinko') {
+      const bf = S.brandFlags || {};
       inputs.dataset.n = '4';
-      inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in'));
-      inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens'));
-      inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total'));
+      if (bf.coin !== 0) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in'));
+      if (bf.bead !== 0) {
+        inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens'));
+        inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total'));
+      }
       inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards'));
     } else {
       inputs.appendChild(makeCell(r, 'in_r', '入', 'prev_in'));
@@ -668,10 +675,15 @@ function renderRecon() {
   const head = $('reconHead');
   head.innerHTML = '';
   const hr = el('tr');
+  const bf = S.brandFlags || {};
   const cols = pach
-    ? [['机台', ''], ['宝点投币', 'num'], ['码表投币', 'num'], ['差', 'num'],
-       ['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
-       ['返珠率', 'num'], ['状态', ''], ['原因', '']]
+    ? [['机台', '']]
+      .concat(bf.coin !== 0
+        ? [['宝点投币', 'num'], ['码表投币', 'num'], ['差', 'num']] : [])
+      .concat(bf.bead !== 0
+        ? [['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
+           ['返珠率', 'num']] : [])
+      .concat([['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
@@ -691,18 +703,22 @@ function renderRecon() {
 
     if (pach) {
       const pm = r.p || {};
-      tr.appendChild(el('td', 'num', fmt(r.up)));
-      tr.appendChild(el('td', 'num', fmt(r.meter)));
-      const td = el('td', 'num lead', fmt(r.diff));
-      if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
-      tr.appendChild(td);
-      tr.appendChild(el('td', 'num', pm.paid === null || pm.paid === undefined ? '-' : fmt(pm.paid)));
-      tr.appendChild(el('td', 'num', pm.win === null || pm.win === undefined ? '-' : fmt(pm.win)));
-      const kp = el('td', 'num lead', pm.keep === null || pm.keep === undefined ? '-' : fmt(pm.keep));
-      if (pm.keep !== null && pm.keep !== undefined && pm.keep < 0) kp.dataset.tone = 'bad';
-      tr.appendChild(kp);
-      tr.appendChild(el('td', 'num',
-        pm.rate === null || pm.rate === undefined ? '-' : (pm.rate * 100).toFixed(1) + '%'));
+      if (bf.coin !== 0) {
+        tr.appendChild(el('td', 'num', fmt(r.up)));
+        tr.appendChild(el('td', 'num', fmt(r.meter)));
+        const td = el('td', 'num lead', fmt(r.diff));
+        if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
+        tr.appendChild(td);
+      }
+      if (bf.bead !== 0) {
+        tr.appendChild(el('td', 'num', pm.paid === null || pm.paid === undefined ? '-' : fmt(pm.paid)));
+        tr.appendChild(el('td', 'num', pm.win === null || pm.win === undefined ? '-' : fmt(pm.win)));
+        const kp = el('td', 'num lead', pm.keep === null || pm.keep === undefined ? '-' : fmt(pm.keep));
+        if (pm.keep !== null && pm.keep !== undefined && pm.keep < 0) kp.dataset.tone = 'bad';
+        tr.appendChild(kp);
+        tr.appendChild(el('td', 'num',
+          pm.rate === null || pm.rate === undefined ? '-' : (pm.rate * 100).toFixed(1) + '%'));
+      }
     } else {
       tr.appendChild(el('td', 'num', fmt(r.up)));
       tr.appendChild(el('td', 'num', fmt(r.down)));
@@ -1087,7 +1103,10 @@ async function renderUnits() {
     wrap.appendChild(head);
 
     if (ADD_KIND === grp.kind) wrap.appendChild(addMachineForm(grp.kind));
-    if (grp.kind === 'pachinko') wrap.appendChild(pachinkoCfg());
+    if (grp.kind === 'pachinko') {
+      wrap.appendChild(brandCfg());
+      wrap.appendChild(pachinkoCfg());
+    }
 
     const grid = el('div', 'machines');
     rows.forEach((g) => {
@@ -1159,6 +1178,55 @@ function addMachineForm(kind) {
   });
 
   setTimeout(() => name.focus(), 0);
+  return box;
+}
+
+function brandCfg() {
+  const brand = S.brand || (MSHOP && MSHOP.group_name) || '';
+  const box = el('div', 'brand-cfg');
+
+  const head = el('div', 'brand-cfg__head');
+  head.appendChild(el('span', 'brand-cfg__t', '品牌设置'));
+  head.appendChild(el('span', 'brand-cfg__n', brand || '未分品牌'));
+  box.appendChild(head);
+  box.appendChild(el('p', 'brand-cfg__d',
+    '这个品牌的弹珠机有哪些环节。关掉的不抄、也不算。'));
+
+  const row = el('div', 'brand-cfg__row');
+  const inputs = {};
+  [['coin', '投币'], ['bead', '出弹珠'], ['card', '出卡']].forEach(([k, label]) => {
+    const f = el('label', 'sw');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = !!(S.brandFlags && S.brandFlags[k]);
+    cb.disabled = S.role !== 'hq';
+    inputs[k] = cb;
+    f.appendChild(cb);
+    f.appendChild(el('span', 'sw__t', label));
+    row.appendChild(f);
+  });
+  box.appendChild(row);
+
+  if (S.role === 'hq') {
+    const save = el('button', 'btn btn--sm', '保存品牌设置');
+    save.type = 'button';
+    save.addEventListener('click', async () => {
+      save.disabled = true;
+      try {
+        const flags = {};
+        Object.keys(inputs).forEach((k) => { flags[k] = inputs[k].checked; });
+        const r = await api('/api/manage/brand/flags', { brand, flags });
+        S.brandFlags = r.flags;
+        toast('品牌设置已保存');
+        await loadEntry();
+        if (S.view === 'recon') await loadRecon();
+      } catch (e) {
+        toast(String(e.message || e), 'bad');
+      }
+      save.disabled = false;
+    });
+    box.appendChild(save);
+  }
   return box;
 }
 
@@ -1518,6 +1586,8 @@ async function boot() {
   S.bdOk = b.baodian_ok;
   S.day = b.edit_day || b.today;
   S.editDay = b.edit_day || b.today;
+  S.brand = b.brand || null;
+  S.brandFlags = b.brand_flags || { coin: 1, bead: 1, card: 1 };
 
   const conn = $('conn');
   conn.dataset.state = S.bdOk ? 'ok' : 'bad';

@@ -416,6 +416,8 @@ def init_db():
             c.execute("ALTER TABLE shops ADD COLUMN group_name TEXT")
         c.execute("CREATE TABLE IF NOT EXISTS shop_map("
                   "cwsj_key TEXT PRIMARY KEY, shop_id TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS brand_flags("
+                  "brand TEXT PRIMARY KEY, flags TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS recon_notes("
                   "shop_id TEXT, day TEXT, unit_id INTEGER, reason TEXT, note TEXT, "
                   "updated_at TEXT, updated_by TEXT, PRIMARY KEY(shop_id,day,unit_id))")
@@ -1070,6 +1072,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bootstrap())
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
+            if p == "/api/brand/flags":
+                return self._send(200, api_brand_flags(q))
             if p == "/api/recon/range":
                 return self._send(200, api_recon_range(q))
             if p == "/api/recon":
@@ -1111,6 +1115,8 @@ class Handler(BaseHTTPRequestHandler):
         if p.startswith("/api/") and p != "/api/login" and actor() is None:
             return self._send(401, {"error": "未登录"})
         try:
+            if p == "/api/manage/brand/flags":
+                return self._send(200, save_brand_flags(b))
             if p == "/api/recon/note":
                 return self._send(200, api_recon_note(b))
             if p == "/api/entry":
@@ -1594,6 +1600,43 @@ def api_me() -> dict:
     }
 
 
+# 弹珠机按品牌配的环节：开着的才抄、才算
+BRAND_FLAGS = [("coin", "投币"), ("bead", "出弹珠"), ("card", "出卡")]
+
+
+def brand_flags(brand: str) -> dict:
+    d = {k: 1 for k, _ in BRAND_FLAGS}
+    if not brand:
+        return d
+    with conn() as c:
+        r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
+    if r and r["flags"]:
+        try:
+            d.update({k: int(v) for k, v in json.loads(r["flags"]).items()})
+        except Exception:
+            pass
+    return d
+
+
+def api_brand_flags(q) -> dict:
+    brand = (q.get("brand") or [""])[0]
+    return {"brand": brand, "flags": brand_flags(brand), "defs": BRAND_FLAGS}
+
+
+def save_brand_flags(b: dict) -> dict:
+    require_hq()
+    brand = (b.get("brand") or "").strip()
+    if not brand:
+        raise RuntimeError("缺品牌名")
+    src = b.get("flags") or {}
+    flags = {k: (1 if src.get(k) else 0) for k, _ in BRAND_FLAGS}
+    with conn() as c:
+        c.execute("INSERT INTO brand_flags(brand, flags) VALUES(?,?) "
+                  "ON CONFLICT(brand) DO UPDATE SET flags=excluded.flags",
+                  (brand, json.dumps(flags)))
+    return {"ok": True, "brand": brand, "flags": flags}
+
+
 def api_bootstrap():
     init_db()
     sid = meta_get("shop_id")
@@ -1652,6 +1695,8 @@ def api_bootstrap():
         "scope_class": SCOPE_CLASS,
         "rate": RATE,
         "units_confirmed": (shop_row(sid) or {}).get("units_confirmed") if sid else None,
+        "brand": (shop_row(sid) or {}).get("group_name") if sid else None,
+        "brand_flags": brand_flags((shop_row(sid) or {}).get("group_name") or "") if sid else None,
     }
 
 
