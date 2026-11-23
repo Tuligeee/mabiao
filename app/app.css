@@ -971,3 +971,17 @@ body[data-scanning="1"] { overflow: hidden; }
 .sw { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
 .sw input { inline-size: 1rem; block-size: 1rem; accent-color: var(--accent); }
 .sw__t { font-size: var(--text-sm); color: var(--ink-2); }
+
+/* 玩法三选一 */
+.mode-list { display: flex; flex-direction: column; gap: var(--space-2); margin-block-end: var(--space-3); }
+.mode {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+.mode[data-on="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.mode input { margin-block-start: 3px; accent-color: var(--accent); }
+.mode__txt { display: flex; flex-direction: column; gap: 2px; }
+.mode__txt b { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.mode__d { font-size: var(--text-xs); color: var(--ink-3); }

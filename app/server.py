@@ -1600,27 +1600,40 @@ def api_me() -> dict:
     }
 
 
-# 弹珠机按品牌配的环节：开着的才抄、才算
-BRAND_FLAGS = [("coin", "投币"), ("bead", "出弹珠"), ("card", "出卡")]
+# 弹珠机按品牌选一种玩法，玩法决定抄哪几个数
+PACHINKO_MODES = [
+    ("swipe_bead_card", "刷卡出珠出卡", ["in_r", "p_tokens", "p_out", "p_cards"]),
+    ("swipe_card", "刷卡出卡", ["in_r", "p_cards"]),
+    ("bead_card", "投珠出卡", ["p_tokens", "p_cards"]),
+]
+MODE_FIELDS = {k: v for k, _, v in PACHINKO_MODES}
+DEFAULT_MODE = "swipe_bead_card"
 
 
-def brand_flags(brand: str) -> dict:
-    d = {k: 1 for k, _ in BRAND_FLAGS}
+def brand_mode(brand: str) -> str:
     if not brand:
-        return d
+        return DEFAULT_MODE
     with conn() as c:
         r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
     if r and r["flags"]:
         try:
-            d.update({k: int(v) for k, v in json.loads(r["flags"]).items()})
+            m = (json.loads(r["flags"]) or {}).get("mode")
+            if m in MODE_FIELDS:
+                return m
         except Exception:
             pass
-    return d
+    return DEFAULT_MODE
+
+
+def brand_flags(brand: str) -> dict:
+    m = brand_mode(brand)
+    return {"mode": m, "fields": MODE_FIELDS[m]}
 
 
 def api_brand_flags(q) -> dict:
     brand = (q.get("brand") or [""])[0]
-    return {"brand": brand, "flags": brand_flags(brand), "defs": BRAND_FLAGS}
+    return {"brand": brand, "flags": brand_flags(brand),
+            "modes": [[k, label] for k, label, _ in PACHINKO_MODES]}
 
 
 def save_brand_flags(b: dict) -> dict:
@@ -1628,13 +1641,14 @@ def save_brand_flags(b: dict) -> dict:
     brand = (b.get("brand") or "").strip()
     if not brand:
         raise RuntimeError("缺品牌名")
-    src = b.get("flags") or {}
-    flags = {k: (1 if src.get(k) else 0) for k, _ in BRAND_FLAGS}
+    mode = b.get("mode") or DEFAULT_MODE
+    if mode not in MODE_FIELDS:
+        raise RuntimeError("没有这种玩法")
     with conn() as c:
         c.execute("INSERT INTO brand_flags(brand, flags) VALUES(?,?) "
                   "ON CONFLICT(brand) DO UPDATE SET flags=excluded.flags",
-                  (brand, json.dumps(flags)))
-    return {"ok": True, "brand": brand, "flags": flags}
+                  (brand, json.dumps({"mode": mode})))
+    return {"ok": True, "brand": brand, "flags": brand_flags(brand)}
 
 
 def api_bootstrap():
