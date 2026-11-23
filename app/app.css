@@ -1079,3 +1079,27 @@ body[data-scanning="1"] { overflow: hidden; }
   font-family: var(--font-mono); font-size: var(--text-xs);
   color: var(--ink-3); letter-spacing: 0.02em;
 }
+
+/* 机型切换：选中实心，一眼看出在哪个 */
+.seg {
+  display: inline-flex; gap: 0;
+  margin-block-start: var(--space-4);
+  padding: 3px;
+  background: var(--hover-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-full);
+}
+.seg__b {
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium);
+  color: var(--ink-2); background: transparent;
+  border: 0; cursor: pointer;
+  padding: 7px 20px; border-radius: var(--radius-full);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.seg__b:hover { color: var(--ink); }
+.seg__b[aria-selected="true"] {
+  color: var(--on-solid); background: var(--accent);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+.seg__b:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
