@@ -994,3 +994,11 @@ body[data-scanning="1"] { overflow: hidden; }
 .mode-list--row .mode { flex: 1 1 14rem; }
 
 .tbl--tight td, .tbl--tight th { padding-block: var(--space-2); }
+
+/* 机台编辑：品牌行 */
+.machine__brand {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-block: var(--space-2) var(--space-3);
+}
+.machine__brand-k { font-size: var(--text-xs); color: var(--ink-3); flex: none; }
+.machine__brand-in { inline-size: 10rem; font-size: var(--text-sm); }

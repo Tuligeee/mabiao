@@ -1871,6 +1871,7 @@ def manage_machines(shop_id: str) -> list:
         out.append({
             "key": base,
             "kind": (units[0].get("kind") or "pusher"),
+            "brand": brand_of(units[0]) if (units[0].get("kind") == "pachinko") else None,
             "units": units,
             "comms": comms,
             "pcomms": [{"p": i + 1, "comm": cid} for i, cid in enumerate(all_comms)],
@@ -1948,15 +1949,16 @@ def save_unit(b: dict) -> dict:
     with conn() as c:
         uid = b.get("id")
         if uid:
-            c.execute("UPDATE units SET name=?, shared=?, locked=1, kind=? WHERE id=?",
-                      (name, shared, kind, uid))
+            c.execute("UPDATE units SET name=?, brand=?, shared=?, locked=1, kind=? WHERE id=?",
+                      (name, (b.get("brand") or "").strip() or None, shared, kind, uid))
             uid = int(uid)
         else:
-            c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind) "
-                      "VALUES(?,?,?,?,1,1,?) "
+            c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,brand) "
+                      "VALUES(?,?,?,?,1,1,?,?) "
                       "ON CONFLICT(shop_id,name) DO UPDATE SET shared=excluded.shared, "
-                      "active=1, locked=1, kind=excluded.kind",
-                      (shop_id, name, b.get("team"), shared, kind))
+                      "active=1, locked=1, kind=excluded.kind, brand=excluded.brand",
+                      (shop_id, name, b.get("team"), shared, kind,
+                       (b.get("brand") or "").strip() or None))
             uid = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
                             (shop_id, name)).fetchone()["id"]
         # 先解绑不在新清单里的通讯ID

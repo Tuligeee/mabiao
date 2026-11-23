@@ -1187,6 +1187,22 @@ function addMachineForm(kind) {
 
 let BRANDS = null;
 
+function fillBrandOptions() {
+  let dl = $('brandOptions');
+  if (!dl) {
+    dl = el('datalist');
+    dl.id = 'brandOptions';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = '';
+  (BRANDS || []).forEach((b) => {
+    const o = el('option');
+    o.value = b.brand;
+    o.label = b.label || b.brand;
+    dl.appendChild(o);
+  });
+}
+
 async function brandCfg() {
   const box = el('div', 'brand-cfg');
   const head = el('div', 'brand-cfg__head');
@@ -1198,6 +1214,7 @@ async function brandCfg() {
     try {
       const d = await api('/api/brand/list?shop_id=' + encodeURIComponent(MSHOP.id));
       BRANDS = d.rows;
+      fillBrandOptions();
     } catch (e) {
       box.appendChild(el('p', 'brand-cfg__sub', String(e.message || e)));
       return box;
@@ -1463,6 +1480,20 @@ function renderMachineEdit(card, g) {
   head.appendChild(el('span', 'machine__meta', g.heads + ' 个卡头'));
   card.appendChild(head);
 
+  let brandIn = null;
+  if ((g.kind || 'pusher') === 'pachinko') {
+    const bw = el('label', 'machine__brand');
+    bw.appendChild(el('span', 'machine__brand-k', '品牌'));
+    brandIn = el('input', 'input machine__brand-in');
+    brandIn.type = 'text';
+    brandIn.autocomplete = 'off';
+    brandIn.value = g.brand || '';
+    brandIn.setAttribute('aria-label', '机台品牌');
+    brandIn.setAttribute('list', 'brandOptions');
+    bw.appendChild(brandIn);
+    card.appendChild(bw);
+  }
+
   const ul = el('ul', 'machine__comms');
 
   const XSvg = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
@@ -1549,11 +1580,13 @@ function renderMachineEdit(card, g) {
         await api('/api/manage/machine/save', {
           shop_id: MSHOP.id, ids: g.units.map((u) => u.id),
           name: nm, comms: cm.join(','), shared: cm.length > 1,
+          brand: brandIn ? brandIn.value.trim() : undefined,
         });
       } else {
         await api('/api/manage/unit/save', {
           id: g.units[0].id, shop_id: MSHOP.id,
           name: nm, comms: cm.join(','), shared: cm.length > 1,
+          brand: brandIn ? brandIn.value.trim() : undefined,
         });
       }
       toast('已保存');
