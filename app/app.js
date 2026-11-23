@@ -382,7 +382,7 @@ async function loadHome() {
 /* ------------------------------------------------------------ 录入 */
 async function loadEntry() {
   if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
-  refreshBdBar();
+  refreshBdState();
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
   S.allRows = d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length }));
   S.confirmed = !!d.confirmed;
@@ -1843,23 +1843,18 @@ async function boot() {
   }
 }
 
-async function refreshBdBar() {
-  const bar = $('bdBar');
-  if (!bar) return;
+async function refreshBdState() {
+  const btn = $('conn');
+  if (!btn) return;
   try {
     const st = await api('/api/bd/status');
     const ok = !!st.alive;
-    bar.hidden = ok;
-    if (!ok) {
-      $('bdBarText').textContent = st.exp_text
-        ? ('宝点登录已过期（' + st.exp_text + '），扫码后自动拉数')
-        : '宝点还没登录，扫码后才算得出核对';
-    }
-    const conn = $('conn');
-    if (conn) {
-      conn.dataset.state = ok ? 'ok' : 'bad';
-      $('connText').textContent = ok ? '宝点已连接' : '宝点未登录';
-    }
+    btn.dataset.state = ok ? 'ok' : 'bad';
+    btn.title = ok
+      ? ('宝点已连接' + (st.exp_text ? '，有效到 ' + st.exp_text : ''))
+      : (st.exp_text ? '宝点登录已过期（' + st.exp_text + '），点这里扫码' : '宝点未登录，点这里扫码');
+    $('connText').textContent = ok ? '宝点已连接' : '宝点登录';
+    btn.setAttribute('aria-label', ok ? '宝点已连接' : '点击扫码登录宝点');
   } catch (e) { /* 忽略 */ }
 }
 
@@ -1906,7 +1901,7 @@ function bdQrDialog() {
             stop();
             box.innerHTML = '';
             box.appendChild(el('p', 'bd-dlg__done', '登录成功'));
-            await refreshBdBar();
+            await refreshBdState();
             setTimeout(close, 800);
           } else if (st.error) {
             tip.textContent = String(st.error).slice(0, 80);
@@ -1953,7 +1948,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
   $('btnExport').addEventListener('click', exportDialog);
-  $('bdLoginBtn').addEventListener('click', () => bdQrDialog());
+  $('conn').addEventListener('click', () => {
+    if ($('conn').dataset.state === 'bad') bdQrDialog();
+    else refreshBdState();
+  });
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
     b.addEventListener('click', async () => {
       if (S.kind === b.dataset.kind) return;

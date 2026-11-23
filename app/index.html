@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
-<link rel="stylesheet" href="theme.css?v=73">
-<link rel="stylesheet" href="app.css?v=73">
+<link rel="stylesheet" href="theme.css?v=74">
+<link rel="stylesheet" href="app.css?v=74">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
@@ -72,10 +72,10 @@
         <div class="dp__pop" id="dayPop" hidden></div>
       </div>
 
-      <p class="conn" id="conn" role="status">
+      <button class="conn conn--btn" type="button" id="conn" data-state="idle">
         <span class="conn__dot" aria-hidden="true"></span>
         <span id="connText">检查中</span>
-      </p>
+      </button>
       <button class="btn btn--sm btn--quiet" type="button" id="btnLogout">退出</button>
     </div>
   </header>
@@ -128,10 +128,6 @@
         </div>
       </section>
 
-      <div class="bd-bar" id="bdBar" hidden>
-        <span class="bd-bar__t" id="bdBarText">宝点未登录，拉不到上币下币</span>
-        <button class="btn btn--sm btn--primary" type="button" id="bdLoginBtn">扫码登录宝点</button>
-      </div>
       <ul class="ledger" id="entryList"></ul>
 
       <div class="note" id="entryNote" hidden>
@@ -271,7 +267,7 @@
 </div>
 
 <script src="vendor/jsQR.js"></script>
-  <script src="ui.js?v=73"></script>
-<script src="app.js?v=73"></script>
+  <script src="ui.js?v=74"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>
