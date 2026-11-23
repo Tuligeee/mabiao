@@ -1818,6 +1818,27 @@ async function boot() {
   });
 
   applyRole();
+
+  // 上次点了宝点登录跳去微信，回来后接着等结果
+  try {
+    const pending = sessionStorage.getItem('bdSid');
+    if (pending) {
+      sessionStorage.removeItem('bdSid');
+      const poll = setInterval(async () => {
+        try {
+          const st = await api('/api/bd/login/poll', { sid: pending });
+          if (st.state === 'ok' && st.ok) {
+            clearInterval(poll);
+            toast('宝点已登录');
+            await refreshBdState();
+          } else if (st.state === 'fail' || st.state === 'expired') {
+            clearInterval(poll);
+          }
+        } catch (e) { clearInterval(poll); }
+      }, 2000);
+      setTimeout(() => clearInterval(poll), 120000);
+    }
+  } catch (e) { /* 忽略 */ }
   if (!b.units_confirmed) welcomeDialog(b);
 
   if (scanHit) {
@@ -1858,7 +1879,29 @@ async function refreshBdState() {
   } catch (e) { /* 忽略 */ }
 }
 
-function bdQrDialog() {
+async function bdLoginClick() {
+  const btn = $('conn');
+  if (btn.dataset.state === 'ok') { refreshBdState(); return; }
+  const inWx = /MicroMessenger/i.test(navigator.userAgent);
+  btn.disabled = true;
+  $('connText').textContent = '正在打开…';
+  try {
+    const r = await api('/api/bd/login/start', {});
+    if (inWx && r.url) {
+      try { sessionStorage.setItem('bdSid', r.sid || ''); } catch (e) { /* 忽略 */ }
+      location.href = r.url;        // 直接跳微信登录页
+      return;
+    }
+    bdQrDialog(r);
+  } catch (e) {
+    toast(String(e.message || e), 'bad');
+  } finally {
+    btn.disabled = false;
+    if (!inWx) refreshBdState();
+  }
+}
+
+function bdQrDialog(pre) {
   const scrim = el('div', 'scrim');
   const dlg = el('div', 'dlg bd-dlg');
   dlg.setAttribute('role', 'dialog');
@@ -1890,20 +1933,8 @@ function bdQrDialog() {
 
   (async () => {
     try {
-      const r = await api('/api/bd/login/start', {});
+      const r = pre || await api('/api/bd/login/start', {});
       sid = r.sid;
-      const inWx = /MicroMessenger/i.test(navigator.userAgent);
-      if (inWx && r.url) {
-        // 微信里直接打开登录页，不用扫码
-        const win = window.open(r.url, '_blank');
-        tip.textContent = win
-          ? '已打开微信登录页，确认后回到这里会自动完成'
-          : '点下面的按钮打开微信登录页';
-        const go = el('button', 'btn btn--primary bd-dlg__go', '打开微信确认登录');
-        go.type = 'button';
-        go.addEventListener('click', () => window.open(r.url, '_blank'));
-        dlg.insertBefore(go, box);
-      }
       box.innerHTML = '';
       const img = el('img', 'bd-dlg__img');
       img.alt = '宝点登录二维码';
@@ -1974,10 +2005,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
   $('btnExport').addEventListener('click', exportDialog);
-  $('conn').addEventListener('click', () => {
-    if ($('conn').dataset.state === 'bad') bdQrDialog();
-    else refreshBdState();
-  });
+  $('conn').addEventListener('click', bdLoginClick);
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
     b.addEventListener('click', async () => {
       if (S.kind === b.dataset.kind) return;
