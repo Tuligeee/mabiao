@@ -1103,3 +1103,11 @@ body[data-scanning="1"] { overflow: hidden; }
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
 }
 .seg__b:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
+
+/* 表格里的通讯ID：小字、等宽、和名字拉开 */
+.tbl__comm {
+  margin-inline-start: var(--space-2);
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--ink-3); letter-spacing: 0.02em;
+  white-space: nowrap;
+}

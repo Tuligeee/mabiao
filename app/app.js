@@ -714,7 +714,15 @@ function renderRecon() {
 
   d.rows.forEach((r) => {
     const tr = el('tr');
-    tr.appendChild(el('td', 'name', r.name));
+    const tdName = el('td', 'name');
+    const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
+    if (nm2) {
+      tdName.appendChild(document.createTextNode(nm2[1]));
+      tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
+    } else {
+      tdName.textContent = r.name;
+    }
+    tr.appendChild(tdName);
 
     if (pach) {
       const pm = r.p || {};
