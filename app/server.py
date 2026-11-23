@@ -416,6 +416,8 @@ def init_db():
             c.execute("ALTER TABLE shops ADD COLUMN group_name TEXT")
         c.execute("CREATE TABLE IF NOT EXISTS shop_map("
                   "cwsj_key TEXT PRIMARY KEY, shop_id TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS brand_alias("
+                  "key TEXT PRIMARY KEY, label TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS brand_flags("
                   "brand TEXT PRIMARY KEY, flags TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS recon_notes("
@@ -1675,10 +1677,12 @@ def brand_list(shop_id: str = "") -> list:
     for r in rs:
         b = unit_brand(r["name"])
         cnt[b] = cnt.get(b, 0) + 1
+    with conn() as c:
+        alias = {r["key"]: r["label"] for r in c.execute("SELECT key,label FROM brand_alias")}
     out = []
     for b in sorted(cnt):
         fl = brand_flags(b)
-        out.append({"brand": b, "units": cnt[b], **fl})
+        out.append({"brand": b, "label": alias.get(b) or b, "units": cnt[b], **fl})
     return out
 
 
@@ -1720,10 +1724,24 @@ def api_brand_flags(q) -> dict:
 
 
 def save_brand_flags(b: dict) -> dict:
-    require_hq()
     brand = (b.get("brand") or "").strip()
     if not brand:
         raise RuntimeError("缺品牌名")
+    # 门店只能改自己店里有的品牌
+    if is_store():
+        own = resolve_shop(actor())
+        names = [r["name"] for r in conn().execute(
+            "SELECT name FROM units WHERE shop_id=? AND kind='pachinko' AND active=1", (own,))]
+        if brand not in {unit_brand(x) for x in names}:
+            raise AuthError("这家店没有这个品牌")
+    label = (b.get("label") or "").strip()
+    if label and label != brand:
+        with conn() as c:
+            c.execute("INSERT INTO brand_alias(key,label) VALUES(?,?) "
+                      "ON CONFLICT(key) DO UPDATE SET label=excluded.label", (brand, label))
+    elif label == brand:
+        with conn() as c:
+            c.execute("DELETE FROM brand_alias WHERE key=?", (brand,))
     mode = b.get("mode") or DEFAULT_MODE
     if mode not in MODE_FIELDS:
         raise RuntimeError("没有这种玩法")

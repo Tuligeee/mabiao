@@ -1220,19 +1220,17 @@ async function brandCfg() {
   const body = el('tbody');
   BRANDS.forEach((b) => {
     const tr = el('tr');
-    tr.appendChild(el('td', 'name', b.brand));
+    tr.appendChild(el('td', 'name', b.label || b.brand));
     tr.appendChild(el('td', 'num', String(b.units)));
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
       bead_card: '投珠出卡' })[b.mode] || b.mode;
     tr.appendChild(el('td', '', modeName));
     tr.appendChild(el('td', '', b.unit === 'bead' ? '记的是珠' : '记的是币'));
     const td = el('td');
-    if (S.role === 'hq') {
-      const b2 = el('button', 'btn btn--sm btn--quiet', '改');
-      b2.type = 'button';
-      b2.addEventListener('click', () => brandDialog(b));
-      td.appendChild(b2);
-    }
+    const b2 = el('button', 'btn btn--sm btn--quiet', '改');
+    b2.type = 'button';
+    b2.addEventListener('click', () => brandDialog(b));
+    td.appendChild(b2);
     tr.appendChild(td);
     body.appendChild(tr);
   });
@@ -1246,7 +1244,16 @@ function brandDialog(b) {
   const dlg = el('div', 'dlg');
   dlg.setAttribute('role', 'dialog');
   dlg.setAttribute('aria-modal', 'true');
-  dlg.appendChild(el('h2', 'dlg__t', b.brand));
+  dlg.appendChild(el('h2', 'dlg__t', '品牌设置'));
+
+  const nameWrap = el('label', 'machine-cfg__f');
+  nameWrap.appendChild(el('span', 'machine-cfg__k', '名称'));
+  const nameIn = el('input', 'input');
+  nameIn.type = 'text';
+  nameIn.value = b.label || b.brand;
+  nameIn.setAttribute('aria-label', '品牌名称');
+  nameWrap.appendChild(nameIn);
+  dlg.appendChild(nameWrap);
 
   const MODES = [
     ['swipe_bead_card', '刷卡出珠出卡'],
@@ -1296,7 +1303,8 @@ function brandDialog(b) {
   save.addEventListener('click', async () => {
     save.disabled = true;
     try {
-      await api('/api/manage/brand/flags', { brand: b.brand, mode, unit });
+      await api('/api/manage/brand/flags',
+        { brand: b.brand, label: nameIn.value.trim() || b.brand, mode, unit });
       BRANDS = null;
       scrim.remove();
       await renderUnits();
