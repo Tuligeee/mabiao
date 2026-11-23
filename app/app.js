@@ -1191,8 +1191,7 @@ function brandCfg() {
   head.appendChild(el('span', 'brand-cfg__t', '品牌玩法'));
   head.appendChild(el('span', 'brand-cfg__n', brand || '未分品牌'));
   box.appendChild(head);
-  box.appendChild(el('p', 'brand-cfg__d',
-    '这个品牌的弹珠机怎么玩。玩法决定要抄哪几个数，其余的不抄也不算。'));
+
 
   const MODES = [
     ['swipe_bead_card', '刷卡出珠出卡', '刷卡出珠，打完出卡 · 抄四个数'],
@@ -1226,7 +1225,7 @@ function brandCfg() {
   box.appendChild(list);
 
   // 码表那个「投币」数记的是币还是珠
-  const uHead = el('p', 'brand-cfg__sub', '码表上的「投币」数记的是什么？');
+  const uHead = el('p', 'brand-cfg__sub', '码表投币数');
   box.appendChild(uHead);
   const ulist = el('div', 'mode-list mode-list--row');
   const ur = [];
