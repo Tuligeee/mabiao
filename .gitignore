@@ -42,3 +42,10 @@ _live_*.png
 
 _brands*.txt
 
+
+_bd*.txt
+_bs.txt
+_brand*.txt
+_log.txt
+_patch_*.py
+

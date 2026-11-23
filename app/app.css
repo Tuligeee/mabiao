@@ -1111,3 +1111,28 @@ body[data-scanning="1"] { overflow: hidden; }
   color: var(--ink-3); letter-spacing: 0.02em;
   white-space: nowrap;
 }
+
+/* 宝点登录提示条 */
+.bd-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-block-end: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--warn-bg);
+  border: 1px solid #F2E3B3;
+  border-radius: var(--radius-lg);
+}
+.bd-bar__t { flex: 1; min-inline-size: 12rem; font-size: var(--text-sm); color: var(--warn); }
+.bd-dlg { inline-size: min(360px, 100%); text-align: center; }
+.bd-dlg__tip { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--ink-2); }
+.bd-dlg__qr {
+  display: grid; place-items: center;
+  min-block-size: 240px;
+  padding: var(--space-3);
+  background: var(--hover);
+  border-radius: var(--radius-lg);
+}
+.bd-dlg__img { inline-size: 220px; block-size: 220px; }
+.bd-dlg__wait, .bd-dlg__err { font-size: var(--text-sm); color: var(--ink-3); margin: 0; }
+.bd-dlg__err { color: var(--bad); }
+.bd-dlg__done { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--ok); margin: 0; }

@@ -295,6 +295,42 @@ def classify(team_name: str) -> str:
     return "未分类"
 
 
+# ---------------------------------------------------------------- 宝点扫码登录
+BD_LOGIN_BASE = (os.environ.get("BD_LOGIN_BASE") or "http://127.0.0.1:8770").rstrip("/")
+BD_KEY_FILE = os.environ.get("BD_LINK_KEY_FILE") or "/opt/bd-login/link_key.txt"
+# bd-login 按 key 另存的那份，和日报/套餐共用的 session.json 分开
+METER_BD_FILE = os.environ.get("METER_BD_FILE") or "/opt/taocan/.cache/sessions/meter.json"
+
+
+def bd_link_key() -> str:
+    try:
+        with open(BD_KEY_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def bd_alive() -> dict:
+    """码表用的宝点登录态还行不行。"""
+    try:
+        with open(METER_BD_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        return {"alive": False, "exp_text": "", "left_hours": -1, "account": ""}
+    exp = float(d.get("exp") or 0) or 0
+    left = (exp - time.time()) / 3600 if exp else -1
+    return {"alive": left > 0, "exp_text": (time.strftime("%Y-%m-%d %H:%M", time.localtime(exp)) if exp else ""),
+            "left_hours": round(left, 2), "account": ((d.get("ctx") or {}).get("user") or {}).get("name") or ""}
+
+
+def bd_call(path: str, body: dict, timeout=90) -> dict:
+    import requests
+    k = bd_link_key()
+    url = BD_LOGIN_BASE + path + (("?k=" + k) if k else "")
+    r = requests.post(url, json=body, timeout=timeout, proxies={"http": None, "https": None})
+    return r.json()
+
+
 # ---------------------------------------------------------------- 宝点
 class Baodian:
     def __init__(self):
@@ -302,7 +338,15 @@ class Baodian:
             sys.path.insert(0, SHARED)
         import baodian_session as S            # noqa: E402
         self.S = S
-        self.d = S.as_login_dict()
+        # 码表自己扫码登录的那份优先；没有/过期再退回全局那份
+        old_file = getattr(S, "SESSION_FILE", None)
+        try:
+            if os.path.exists(METER_BD_FILE) and bd_alive()["alive"]:
+                S.SESSION_FILE = METER_BD_FILE
+            self.d = S.as_login_dict()
+        finally:
+            if old_file is not None:
+                S.SESSION_FILE = old_file
 
     @property
     def token(self) -> str:
@@ -1099,6 +1143,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bootstrap())
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
+            if p == "/api/bd/status":
+                return self._send(200, api_bd_status(q))
             if p == "/api/brand/list":
                 return self._send(200, api_brand_list(q))
             if p == "/api/brand/flags":
@@ -1144,6 +1190,10 @@ class Handler(BaseHTTPRequestHandler):
         if p.startswith("/api/") and p != "/api/login" and actor() is None:
             return self._send(401, {"error": "未登录"})
         try:
+            if p == "/api/bd/login/start":
+                return self._send(200, api_bd_start(b))
+            if p == "/api/bd/login/poll":
+                return self._send(200, api_bd_poll(b))
             if p == "/api/manage/brand/flags":
                 return self._send(200, save_brand_flags(b))
             if p == "/api/recon/note":
@@ -1723,6 +1773,32 @@ def brand_unit(brand: str) -> str:
 def brand_flags(brand: str) -> dict:
     m = brand_mode(brand)
     return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand)}
+
+
+def api_bd_status(q) -> dict:
+    st = bd_alive()
+    return {"ok": True, **st}
+
+
+def api_bd_start(b: dict) -> dict:
+    """生成一个宝点登录二维码，扫完会另存成码表专用会话。"""
+    r = bd_call("/api/start", {"sys": "baodian", "wait": 2, "key": "meter"})
+    if not r.get("ok"):
+        raise RuntimeError(r.get("error") or "生成二维码失败")
+    return {"sid": r.get("sid"), "png": r.get("png") or "", "state": r.get("state") or ""}
+
+
+def api_bd_poll(b: dict) -> dict:
+    sid = (b.get("sid") or "").strip()
+    if not sid:
+        raise RuntimeError("缺 sid")
+    r = bd_call("/api/status", {"sid": sid, "key": "meter"})
+    out = {"ok": bool(r.get("ok")), "state": r.get("state") or "",
+           "error": r.get("error") or "", "err": r.get("err") or ""}
+    if r.get("state") == "ok" and out["ok"]:
+        reset_baodian()
+        out.update(bd_alive())
+    return out
 
 
 def api_brand_list(q) -> dict:

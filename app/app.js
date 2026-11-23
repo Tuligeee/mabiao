@@ -382,6 +382,7 @@ async function loadHome() {
 /* ------------------------------------------------------------ 录入 */
 async function loadEntry() {
   if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
+  refreshBdBar();
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
   S.allRows = d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length }));
   S.confirmed = !!d.confirmed;
@@ -1842,6 +1843,85 @@ async function boot() {
   }
 }
 
+async function refreshBdBar() {
+  const bar = $('bdBar');
+  if (!bar) return;
+  try {
+    const st = await api('/api/bd/status');
+    const ok = !!st.alive;
+    bar.hidden = ok;
+    if (!ok) {
+      $('bdBarText').textContent = st.exp_text
+        ? ('宝点登录已过期（' + st.exp_text + '），扫码后自动拉数')
+        : '宝点还没登录，扫码后才算得出核对';
+    }
+    const conn = $('conn');
+    if (conn) {
+      conn.dataset.state = ok ? 'ok' : 'bad';
+      $('connText').textContent = ok ? '宝点已连接' : '宝点未登录';
+    }
+  } catch (e) { /* 忽略 */ }
+}
+
+function bdQrDialog() {
+  const scrim = el('div', 'scrim');
+  const dlg = el('div', 'dlg bd-dlg');
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.appendChild(el('h2', 'dlg__t', '扫码登录宝点'));
+  const tip = el('p', 'bd-dlg__tip', '用宝点 App 扫这个码');
+  dlg.appendChild(tip);
+  const box = el('div', 'bd-dlg__qr');
+  box.appendChild(el('p', 'bd-dlg__wait', '正在生成…'));
+  dlg.appendChild(box);
+  const acts = el('div', 'dlg__acts');
+  const cancel = el('button', 'btn btn--quiet', '关闭');
+  cancel.type = 'button';
+  acts.appendChild(cancel);
+  dlg.appendChild(acts);
+  scrim.appendChild(dlg);
+  document.body.appendChild(scrim);
+
+  let timer = null;
+  let sid = null;
+  const stop = () => { if (timer) clearInterval(timer); timer = null; };
+  const close = () => { stop(); scrim.remove(); };
+
+  cancel.addEventListener('click', close);
+
+  (async () => {
+    try {
+      const r = await api('/api/bd/login/start', {});
+      sid = r.sid;
+      box.innerHTML = '';
+      const img = el('img', 'bd-dlg__img');
+      img.alt = '宝点登录二维码';
+      img.src = /^data:/.test(r.png) ? r.png : ('data:image/png;base64,' + r.png);
+      box.appendChild(img);
+      timer = setInterval(async () => {
+        if (!sid) return;
+        try {
+          const st = await api('/api/bd/login/poll', { sid });
+          if (st.state === 'ok' && st.ok) {
+            stop();
+            box.innerHTML = '';
+            box.appendChild(el('p', 'bd-dlg__done', '登录成功'));
+            await refreshBdBar();
+            setTimeout(close, 800);
+          } else if (st.error) {
+            tip.textContent = String(st.error).slice(0, 80);
+          }
+        } catch (e) { /* 轮询失败不打断 */ }
+      }, 2000);
+    } catch (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'bd-dlg__err', String(e.message || e)));
+    }
+  })();
+
+  return { close };
+}
+
 function showBootErr(msg) {
   const box = $('bootErr');
   if (!box) { alert(msg); return; }
@@ -1873,6 +1953,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
   $('btnExport').addEventListener('click', exportDialog);
+  $('bdLoginBtn').addEventListener('click', () => bdQrDialog());
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
     b.addEventListener('click', async () => {
       if (S.kind === b.dataset.kind) return;
