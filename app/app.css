@@ -985,3 +985,10 @@ body[data-scanning="1"] { overflow: hidden; }
 .mode__txt { display: flex; flex-direction: column; gap: 2px; }
 .mode__txt b { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
 .mode__d { font-size: var(--text-xs); color: var(--ink-3); }
+
+.brand-cfg__sub {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--text-xs); color: var(--ink-3);
+}
+.mode-list--row { flex-direction: row; flex-wrap: wrap; }
+.mode-list--row .mode { flex: 1 1 14rem; }

@@ -3,6 +3,7 @@
 const S = {
   role: 'store', me: null, kind: 'pusher', pendingUnit: null, scan: null,
   brand: null, brandFlags: null, pachFields: ['in_r', 'p_tokens', 'p_out', 'p_cards'],
+  meterUnit: 'coin',
   shopId: null, day: null, view: 'entry',
   shops: [], units: [], entry: [], allRows: [], confirmed: false,
   recon: null, setup: null, bdOk: true,
@@ -678,7 +679,9 @@ function renderRecon() {
   const cols = pach
     ? [['机台', '']]
       .concat(hasF('in_r')
-        ? [['宝点投币', 'num'], ['码表投币', 'num'], ['差', 'num']] : [])
+        ? [['宝点投币', 'num'],
+           [S.meterUnit === 'bead' ? '码表投币（珠）' : '码表投币（币）', 'num'],
+           ['差', 'num']] : [])
       .concat(hasF('p_tokens') && hasF('p_out')
         ? [['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
            ['返珠率', 'num']] : [])
@@ -1222,6 +1225,36 @@ function brandCfg() {
   });
   box.appendChild(list);
 
+  // 码表那个「投币」数记的是币还是珠
+  const uHead = el('p', 'brand-cfg__sub', '码表上的「投币」数记的是什么？');
+  box.appendChild(uHead);
+  const ulist = el('div', 'mode-list mode-list--row');
+  const ur = [];
+  const curU = (S.brandFlags && S.brandFlags.unit) || 'coin';
+  [['coin', '记的是币', '投几个币就记几'],
+   ['bead', '记的是珠', '已经乘过一币几珠']].forEach(([k, label, desc]) => {
+    const f = el('label', 'mode');
+    const r = el('input');
+    r.type = 'radio';
+    r.name = 'meterUnit';
+    r.value = k;
+    r.checked = k === curU;
+    r.disabled = S.role !== 'hq';
+    ur.push(r);
+    f.appendChild(r);
+    const txt = el('span', 'mode__txt');
+    txt.appendChild(el('b', null, label));
+    txt.appendChild(el('span', 'mode__d', desc));
+    f.appendChild(txt);
+    if (k === curU) f.dataset.on = 'true';
+    r.addEventListener('change', () => {
+      ulist.querySelectorAll('.mode').forEach((x) => { delete x.dataset.on; });
+      if (r.checked) f.dataset.on = 'true';
+    });
+    ulist.appendChild(f);
+  });
+  box.appendChild(ulist);
+
   if (S.role === 'hq') {
     const save = el('button', 'btn btn--sm', '保存玩法');
     save.type = 'button';
@@ -1230,9 +1263,13 @@ function brandCfg() {
       try {
         const picked = radios.find((r) => r.checked);
         if (!picked) throw new Error('先选一种玩法');
-        const res = await api('/api/manage/brand/flags', { brand, mode: picked.value });
+        const pickedU = ur.find((r) => r.checked);
+        if (!pickedU) throw new Error('先选码表记的是币还是珠');
+        const res = await api('/api/manage/brand/flags',
+          { brand, mode: picked.value, unit: pickedU.value });
         S.brandFlags = res.flags;
         S.pachFields = res.flags.fields;
+        S.meterUnit = res.flags.unit;
         toast('玩法已保存');
         await loadEntry();
         if (S.view === 'recon') await loadRecon();
@@ -1606,6 +1643,7 @@ async function boot() {
   S.brandFlags = b.brand_flags || { mode: 'swipe_bead_card' };
   S.pachFields = (b.brand_flags && b.brand_flags.fields)
     || ['in_r', 'p_tokens', 'p_out', 'p_cards'];
+  S.meterUnit = (b.brand_flags && b.brand_flags.unit) || 'coin';
 
   const conn = $('conn');
   conn.dataset.state = S.bdOk ? 'ok' : 'bad';

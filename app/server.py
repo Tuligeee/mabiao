@@ -707,10 +707,18 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
                 d_tokens = (rd["p_tokens"] or 0) - (pv["p_tokens"] or 0)
                 d_out = (rd["p_out"] or 0) - (pv["p_out"] or 0)
                 d_cards = (rd["p_cards"] or 0) - (pv["p_cards"] or 0)
-            # 码表记的是投币数，要乘「一币几珠」才是投币出珠（珠）
+            # 码表的「投币」数有两种记法：
+            #   记币 → 投币出珠 = 投币数 × 一币几珠，和宝点上币直接比
+            #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
             row_shop0 = shop_row(shop_id) or {}
             per_coin = row_shop0.get("beads_per_coin")
-            paid_beads = (tin * per_coin) if (tin is not None and per_coin) else None
+            m_unit = brand_unit(row_shop0.get("group_name") or "")
+            if m_unit == "bead" and per_coin:
+                paid_beads = tin
+                tin_coins = (tin / per_coin) if tin is not None else None
+            else:
+                paid_beads = (tin * per_coin) if (tin is not None and per_coin) else None
+                tin_coins = tin
             win = (d_out - paid_beads) if (d_out is not None and paid_beads is not None) else None
             keep = (d_tokens - win) if (d_tokens is not None and win is not None) else None
             rate_p = (win / d_tokens) if (win is not None and d_tokens) else None
@@ -721,7 +729,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             if keep is not None and d_cards is not None and bead and cardv:
                 profit = keep * bead - d_cards * cardv
             p_metrics = {
-                "coins": tin, "per_coin": per_coin, "paid": paid_beads,
+                "coins": tin, "coins_norm": tin_coins, "unit": m_unit,
+                "per_coin": per_coin, "paid": paid_beads,
                 "tokens": d_tokens, "out": d_out, "cards": d_cards,
                 "win": win, "keep": keep, "rate": rate_p, "profit": profit,
             }
@@ -729,7 +738,10 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         head = None
         if rd and got:
             head = (up or 0) - (0 if is_p else (down or 0))
-        meter = tin if is_p else ((tin - tout) if (tin is not None and tout is not None) else None)
+        if is_p:
+            meter = (p_metrics or {}).get("coins_norm") if p_metrics else tin
+        else:
+            meter = (tin - tout) if (tin is not None and tout is not None) else None
 
         if not rd:
             status = "今天还没填"
@@ -1625,9 +1637,29 @@ def brand_mode(brand: str) -> str:
     return DEFAULT_MODE
 
 
+METER_UNITS = [("coin", "码表记的是币"), ("bead", "码表记的是珠")]
+DEFAULT_UNIT = "coin"
+
+
+def brand_unit(brand: str) -> str:
+    """码表那个「投币」数，记的是币还是珠。"""
+    if not brand:
+        return DEFAULT_UNIT
+    with conn() as c:
+        r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
+    if r and r["flags"]:
+        try:
+            u = (json.loads(r["flags"]) or {}).get("unit")
+            if u in dict(METER_UNITS):
+                return u
+        except Exception:
+            pass
+    return DEFAULT_UNIT
+
+
 def brand_flags(brand: str) -> dict:
     m = brand_mode(brand)
-    return {"mode": m, "fields": MODE_FIELDS[m]}
+    return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand)}
 
 
 def api_brand_flags(q) -> dict:
@@ -1644,10 +1676,13 @@ def save_brand_flags(b: dict) -> dict:
     mode = b.get("mode") or DEFAULT_MODE
     if mode not in MODE_FIELDS:
         raise RuntimeError("没有这种玩法")
+    unit = b.get("unit") or DEFAULT_UNIT
+    if unit not in dict(METER_UNITS):
+        raise RuntimeError("码表单位只能是币或珠")
     with conn() as c:
         c.execute("INSERT INTO brand_flags(brand, flags) VALUES(?,?) "
                   "ON CONFLICT(brand) DO UPDATE SET flags=excluded.flags",
-                  (brand, json.dumps({"mode": mode})))
+                  (brand, json.dumps({"mode": mode, "unit": unit})))
     return {"ok": True, "brand": brand, "flags": brand_flags(brand)}
 
 
