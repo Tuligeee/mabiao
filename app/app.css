@@ -992,3 +992,5 @@ body[data-scanning="1"] { overflow: hidden; }
 }
 .mode-list--row { flex-direction: row; flex-wrap: wrap; }
 .mode-list--row .mode { flex: 1 1 14rem; }
+
+.tbl--tight td, .tbl--tight th { padding-block: var(--space-2); }

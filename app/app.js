@@ -281,7 +281,7 @@ async function loadScan(code, id) {
     const inputs = el('div', 'scan__inputs');
     const noop = () => {};
     if (d.kind === 'pachinko') {
-      const flds0 = S.pachFields || [];
+      const flds0 = r.fields || S.pachFields || [];
       const has0 = (k) => flds0.indexOf(k) >= 0;
       if (has0('in_r')) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in', noop));
       if (has0('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens', noop));
@@ -481,7 +481,7 @@ function renderEntry() {
 
     const inputs = el('div', 'lrow__inputs');
     if (r.kind === 'pachinko') {
-      const flds = S.pachFields || [];
+      const flds = r.fields || S.pachFields || [];
       const has = (k) => flds.indexOf(k) >= 0;
       inputs.dataset.n = String(flds.length);
       if (has('in_r')) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in'));
@@ -674,13 +674,14 @@ function renderRecon() {
   const head = $('reconHead');
   head.innerHTML = '';
   const hr = el('tr');
-  const flds = S.pachFields || [];
-  const hasF = (k) => flds.indexOf(k) >= 0;
+  const uni = {};
+  (d.rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
+  const hasF = (k) => !!uni[k];
   const cols = pach
     ? [['机台', '']]
       .concat(hasF('in_r')
         ? [['宝点投币', 'num'],
-           [S.meterUnit === 'bead' ? '码表投币（珠）' : '码表投币（币）', 'num'],
+           ['码表投币', 'num'],
            ['差', 'num']] : [])
       .concat(hasF('p_tokens') && hasF('p_out')
         ? [['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
@@ -1057,6 +1058,7 @@ async function loadSettings() {
 
 async function openShop(shop) {
   MSHOP = shop;
+  BRANDS = null;
   MUNIT = null;
   MGROUP = null;
   EDIT_KEY = null;
@@ -1087,7 +1089,7 @@ async function renderUnits() {
     { kind: 'pachinko', name: '弹珠机' },
   ];
 
-  groups.forEach((grp) => {
+  for (const grp of groups) {
     const rows = d.rows.filter((g) => (g.kind || 'pusher') === grp.kind);
     if (!rows.length) return;
 
@@ -1106,7 +1108,7 @@ async function renderUnits() {
 
     if (ADD_KIND === grp.kind) wrap.appendChild(addMachineForm(grp.kind));
     if (grp.kind === 'pachinko') {
-      wrap.appendChild(brandCfg());
+      wrap.appendChild(await brandCfg());
       wrap.appendChild(pachinkoCfg());
     }
 
@@ -1118,7 +1120,7 @@ async function renderUnits() {
       grid.appendChild(card);
     });
     wrap.appendChild(grid);
-  });
+  }
 
   if (EDIT_KEY) {
     const f = wrap.querySelector('.machine__name-edit');
@@ -1183,103 +1185,135 @@ function addMachineForm(kind) {
   return box;
 }
 
-function brandCfg() {
-  const brand = S.brand || (MSHOP && MSHOP.group_name) || '';
-  const box = el('div', 'brand-cfg');
+let BRANDS = null;
 
+async function brandCfg() {
+  const box = el('div', 'brand-cfg');
   const head = el('div', 'brand-cfg__head');
-  head.appendChild(el('span', 'brand-cfg__t', '品牌玩法'));
-  head.appendChild(el('span', 'brand-cfg__n', brand || '未分品牌'));
+  head.appendChild(el('span', 'brand-cfg__t', '机台品牌'));
   box.appendChild(head);
 
+  if (!BRANDS) {
+    box.appendChild(el('p', 'brand-cfg__sub', '读取中'));
+    try {
+      const d = await api('/api/brand/list?shop_id=' + encodeURIComponent(MSHOP.id));
+      BRANDS = d.rows;
+    } catch (e) {
+      box.appendChild(el('p', 'brand-cfg__sub', String(e.message || e)));
+      return box;
+    }
+    box.innerHTML = '';
+    box.appendChild(head);
+  }
+
+  const tb = el('table', 'tbl tbl--tight');
+  const thead = el('thead');
+  const hr = el('tr');
+  ['品牌', '台数', '玩法', '码表投币数', ''].forEach((t, i) => {
+    const th = el('th', i === 1 ? 'num' : '', t);
+    th.scope = 'col';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  tb.appendChild(thead);
+
+  const body = el('tbody');
+  BRANDS.forEach((b) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'name', b.brand));
+    tr.appendChild(el('td', 'num', String(b.units)));
+    const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
+      bead_card: '投珠出卡' })[b.mode] || b.mode;
+    tr.appendChild(el('td', '', modeName));
+    tr.appendChild(el('td', '', b.unit === 'bead' ? '记的是珠' : '记的是币'));
+    const td = el('td');
+    if (S.role === 'hq') {
+      const b2 = el('button', 'btn btn--sm btn--quiet', '改');
+      b2.type = 'button';
+      b2.addEventListener('click', () => brandDialog(b));
+      td.appendChild(b2);
+    }
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+  tb.appendChild(body);
+  box.appendChild(tb);
+  return box;
+}
+
+function brandDialog(b) {
+  const scrim = el('div', 'scrim');
+  const dlg = el('div', 'dlg');
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.appendChild(el('h2', 'dlg__t', b.brand));
 
   const MODES = [
-    ['swipe_bead_card', '刷卡出珠出卡', '刷卡出珠，打完出卡 · 抄四个数'],
-    ['swipe_card', '刷卡出卡', '刷卡直接出卡 · 抄投币和出卡'],
-    ['bead_card', '投珠出卡', '投珠换卡 · 抄投珠和出卡'],
+    ['swipe_bead_card', '刷卡出珠出卡'],
+    ['swipe_card', '刷卡出卡'],
+    ['bead_card', '投珠出卡'],
   ];
-  const cur = (S.brandFlags && S.brandFlags.mode) || 'swipe_bead_card';
-  const list = el('div', 'mode-list');
-  const radios = [];
-  MODES.forEach(([k, label, desc]) => {
-    const f = el('label', 'mode');
-    const r = el('input');
-    r.type = 'radio';
-    r.name = 'pachMode';
-    r.value = k;
-    r.checked = k === cur;
-    r.disabled = S.role !== 'hq';
-    radios.push(r);
-    f.appendChild(r);
-    const txt = el('span', 'mode__txt');
-    txt.appendChild(el('b', null, label));
-    txt.appendChild(el('span', 'mode__d', desc));
-    f.appendChild(txt);
-    if (k === cur) f.dataset.on = 'true';
-    r.addEventListener('change', () => {
-      list.querySelectorAll('.mode').forEach((x) => { delete x.dataset.on; });
-      if (r.checked) f.dataset.on = 'true';
-    });
-    list.appendChild(f);
-  });
-  box.appendChild(list);
+  let mode = b.mode;
+  let unit = b.unit;
 
-  // 码表那个「投币」数记的是币还是珠
-  const uHead = el('p', 'brand-cfg__sub', '码表投币数');
-  box.appendChild(uHead);
-  const ulist = el('div', 'mode-list mode-list--row');
-  const ur = [];
-  const curU = (S.brandFlags && S.brandFlags.unit) || 'coin';
-  [['coin', '记的是币', '投几个币就记几'],
-   ['bead', '记的是珠', '已经乘过一币几珠']].forEach(([k, label, desc]) => {
-    const f = el('label', 'mode');
-    const r = el('input');
-    r.type = 'radio';
-    r.name = 'meterUnit';
-    r.value = k;
-    r.checked = k === curU;
-    r.disabled = S.role !== 'hq';
-    ur.push(r);
-    f.appendChild(r);
-    const txt = el('span', 'mode__txt');
-    txt.appendChild(el('b', null, label));
-    txt.appendChild(el('span', 'mode__d', desc));
-    f.appendChild(txt);
-    if (k === curU) f.dataset.on = 'true';
-    r.addEventListener('change', () => {
-      ulist.querySelectorAll('.mode').forEach((x) => { delete x.dataset.on; });
-      if (r.checked) f.dataset.on = 'true';
+  const mkGroup = (label, opts, cur, onPick) => {
+    dlg.appendChild(el('p', 'brand-cfg__sub', label));
+    const list = el('div', 'mode-list mode-list--row');
+    const rs = [];
+    opts.forEach(([k, text]) => {
+      const f = el('label', 'mode');
+      const r = el('input');
+      r.type = 'radio';
+      r.name = label;
+      r.value = k;
+      r.checked = k === cur;
+      rs.push(r);
+      f.appendChild(r);
+      const txt = el('span', 'mode__txt');
+      txt.appendChild(el('b', null, text));
+      f.appendChild(txt);
+      if (k === cur) f.dataset.on = 'true';
+      r.addEventListener('change', () => {
+        list.querySelectorAll('.mode').forEach((x) => { delete x.dataset.on; });
+        if (r.checked) f.dataset.on = 'true';
+        onPick(k);
+      });
+      list.appendChild(f);
     });
-    ulist.appendChild(f);
-  });
-  box.appendChild(ulist);
+    dlg.appendChild(list);
+    return rs;
+  };
 
-  if (S.role === 'hq') {
-    const save = el('button', 'btn btn--sm', '保存玩法');
-    save.type = 'button';
-    save.addEventListener('click', async () => {
-      save.disabled = true;
-      try {
-        const picked = radios.find((r) => r.checked);
-        if (!picked) throw new Error('先选一种玩法');
-        const pickedU = ur.find((r) => r.checked);
-        if (!pickedU) throw new Error('先选码表记的是币还是珠');
-        const res = await api('/api/manage/brand/flags',
-          { brand, mode: picked.value, unit: pickedU.value });
-        S.brandFlags = res.flags;
-        S.pachFields = res.flags.fields;
-        S.meterUnit = res.flags.unit;
-        toast('玩法已保存');
-        await loadEntry();
-        if (S.view === 'recon') await loadRecon();
-      } catch (e) {
-        toast(String(e.message || e), 'bad');
-      }
+  mkGroup('玩法', MODES, mode, (v) => { mode = v; });
+  mkGroup('码表投币数', [['coin', '记的是币'], ['bead', '记的是珠']], unit, (v) => { unit = v; });
+
+  const acts = el('div', 'dlg__acts');
+  const cancel = el('button', 'btn btn--quiet', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => scrim.remove());
+  const save = el('button', 'btn btn--primary', '保存');
+  save.type = 'button';
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      await api('/api/manage/brand/flags', { brand: b.brand, mode, unit });
+      BRANDS = null;
+      scrim.remove();
+      await renderUnits();
+      await loadEntry();
+      if (S.view === 'recon') await loadRecon();
+      toast('已保存');
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
       save.disabled = false;
-    });
-    box.appendChild(save);
-  }
-  return box;
+    }
+  });
+  acts.appendChild(cancel);
+  acts.appendChild(save);
+  dlg.appendChild(acts);
+  scrim.appendChild(dlg);
+  document.body.appendChild(scrim);
+  save.focus();
 }
 
 function pachinkoCfg() {

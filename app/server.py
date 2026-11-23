@@ -712,7 +712,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
             row_shop0 = shop_row(shop_id) or {}
             per_coin = row_shop0.get("beads_per_coin")
-            m_unit = brand_unit(row_shop0.get("group_name") or "")
+            u_brand = unit_brand(u.get("name") or "")
+            m_unit = brand_unit(u_brand)
             if m_unit == "bead" and per_coin:
                 paid_beads = tin
                 tin_coins = (tin / per_coin) if tin is not None else None
@@ -759,6 +760,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
 
         rows.append({
             "kind": u.get("kind") or "pusher",
+            "brand": u_brand if is_p else None,
+            "fields": MODE_FIELDS[brand_mode(u_brand)] if is_p else None,
             "p": p_metrics,
             "unit_id": u["id"], "name": u["name"], "team": u["team"],
             "shared": bool(u["shared"]), "comm_count": len(comms),
@@ -845,6 +848,8 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "unit_id": u["id"], "name": u["name"], "team": u["team"], "shared": bool(u["shared"]),
             "active": bool(u["active"]),
             "kind": u.get("kind") or "pusher",
+            "brand": unit_brand(u["name"]) if (u.get("kind") == "pachinko") else None,
+            "fields": brand_flags(unit_brand(u["name"]))["fields"] if (u.get("kind") == "pachinko") else None,
             "pos": u.get("pos"), "code": u.get("code"),
             "comms": comms, "has_card": any(c in have_card for c in comms),
             "prev_in": pv["in_r"] if pv else None,
@@ -1084,6 +1089,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bootstrap())
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
+            if p == "/api/brand/list":
+                return self._send(200, api_brand_list(q))
             if p == "/api/brand/flags":
                 return self._send(200, api_brand_flags(q))
             if p == "/api/recon/range":
@@ -1637,6 +1644,44 @@ def brand_mode(brand: str) -> str:
     return DEFAULT_MODE
 
 
+_BRAND_TAILS = ("超级弹珠台", "弹珠台", "弹珠机", "多珠机", "推币机")
+
+
+def unit_brand(name: str) -> str:
+    """从机台名剥出机台品牌：塔兰弹珠机-001 → 塔兰。"""
+    s0 = re.sub(r"\s+\d{5,}$", "", name or "").strip()
+    s1 = re.sub(r"[-_ ]*\d+$", "", s0).strip()
+    s1 = re.sub(r"\d+号$", "", s1).strip()
+    s1 = re.sub(r"\d+人位$", "", s1).strip()
+    for t in _BRAND_TAILS:
+        if s1 == t:
+            return t
+        if s1.endswith(t):
+            head = s1[: -len(t)].strip()
+            if head:
+                return head
+    return s1 or s0 or (name or "")
+
+
+def brand_list(shop_id: str = "") -> list:
+    """当前有哪些机台品牌，各多少台，各自的设置。"""
+    with conn() as c:
+        if shop_id:
+            rs = c.execute("SELECT name FROM units WHERE kind='pachinko' AND active=1 "
+                           "AND shop_id=?", (shop_id,)).fetchall()
+        else:
+            rs = c.execute("SELECT name FROM units WHERE kind='pachinko' AND active=1").fetchall()
+    cnt = {}
+    for r in rs:
+        b = unit_brand(r["name"])
+        cnt[b] = cnt.get(b, 0) + 1
+    out = []
+    for b in sorted(cnt):
+        fl = brand_flags(b)
+        out.append({"brand": b, "units": cnt[b], **fl})
+    return out
+
+
 METER_UNITS = [("coin", "码表记的是币"), ("bead", "码表记的是珠")]
 DEFAULT_UNIT = "coin"
 
@@ -1660,6 +1705,12 @@ def brand_unit(brand: str) -> str:
 def brand_flags(brand: str) -> dict:
     m = brand_mode(brand)
     return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand)}
+
+
+def api_brand_list(q) -> dict:
+    sid = (q.get("shop_id") or [""])[0]
+    return {"rows": brand_list(sid), "modes": [[k, l] for k, l, _ in PACHINKO_MODES],
+            "units": METER_UNITS}
 
 
 def api_brand_flags(q) -> dict:
