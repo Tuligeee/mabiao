@@ -1226,7 +1226,7 @@ async function brandCfg() {
   const tb = el('table', 'tbl tbl--tight');
   const thead = el('thead');
   const hr = el('tr');
-  ['品牌', '台数', '玩法', '码表显示', ''].forEach((t, i) => {
+  ['品牌', '台数', '玩法', '码表显示', '操作'].forEach((t, i) => {
     const th = el('th', i === 1 ? 'num' : '', t);
     th.scope = 'col';
     hr.appendChild(th);
@@ -1244,8 +1244,9 @@ async function brandCfg() {
     tr.appendChild(el('td', '', modeName));
     tr.appendChild(el('td', '', b.unit === 'bead' ? '投珠' : '投币'));
     const td = el('td');
-    const b2 = el('button', 'btn btn--sm btn--quiet', '改');
+    const b2 = el('button', 'btn btn--sm brand-edit', '编辑');
     b2.type = 'button';
+    b2.setAttribute('aria-label', '编辑品牌 ' + (b.label || b.brand));
     b2.addEventListener('click', () => brandDialog(b));
     td.appendChild(b2);
     tr.appendChild(td);
@@ -1470,38 +1471,63 @@ function renderMachineEdit(card, g) {
   card.dataset.editing = 'true';
   card.setAttribute('aria-label', '编辑机台 ' + g.key);
 
-  const head = el('header', 'machine__head');
-  const nameIn = el('input', 'machine__name-edit');
+  const nameIn = el('input', 'mf__name');
   nameIn.type = 'text';
   nameIn.autocomplete = 'off';
   nameIn.value = g.key;
   nameIn.setAttribute('aria-label', '机台名');
-  head.appendChild(nameIn);
-  head.appendChild(el('span', 'machine__meta', g.heads + ' 个卡头'));
-  card.appendChild(head);
+  card.appendChild(nameIn);
 
-  let brandIn = null;
+  const meta = el('p', 'mf__meta', g.heads + ' 个卡头');
+  card.appendChild(meta);
+
+  // 品牌（只对弹珠机）
+  let brandVal = g.brand || '';
   if ((g.kind || 'pusher') === 'pachinko') {
-    const bw = el('label', 'machine__brand');
-    bw.appendChild(el('span', 'machine__brand-k', '品牌'));
-    brandIn = el('input', 'input machine__brand-in');
-    brandIn.type = 'text';
-    brandIn.autocomplete = 'off';
-    brandIn.value = g.brand || '';
-    brandIn.setAttribute('aria-label', '机台品牌');
-    brandIn.setAttribute('list', 'brandOptions');
-    bw.appendChild(brandIn);
-    card.appendChild(bw);
+    const row = el('div', 'mf__row');
+    row.appendChild(el('span', 'mf__k', '品牌'));
+    const wrap = el('div', 'pick pick--block');
+    const btn = el('button', 'pick__btn');
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'listbox');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', '机台品牌');
+    const valEl = el('span', 'pick__val');
+    btn.appendChild(valEl);
+    btn.insertAdjacentHTML('beforeend', UI.CHEV);
+    const pop = el('ul', 'pick__pop');
+    pop.hidden = true;
+    pop.setAttribute('role', 'listbox');
+    wrap.appendChild(btn);
+    wrap.appendChild(pop);
+    row.appendChild(wrap);
+    card.appendChild(row);
+
+    const picker = UI.picker({
+      btn, pop, valueEl: valEl,
+      getItems: () => (BRANDS || []).map((b) => ({
+        label: b.label || b.brand,
+        value: b.brand,
+        selected: b.brand === brandVal,
+      })),
+      onPick: (it) => { brandVal = it.value; picker.set(it.label); },
+    });
+    picker.set(brandVal || '选择品牌');
   }
 
-  const ul = el('ul', 'machine__comms');
+  // 卡头
+  const rowC = el('div', 'mf__row mf__row--top');
+  rowC.appendChild(el('span', 'mf__k', '卡头'));
+  const ul = el('ul', 'mf__chips');
+  ul.setAttribute('aria-label', '通讯ID');
+  rowC.appendChild(ul);
+  card.appendChild(rowC);
 
   const XSvg = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
   function addChip(val, p) {
     const li = el('li', 'chip chip--edit');
-    const pl = el('b', 'chip__p', 'P' + (p || 1) + '：');
-    li.appendChild(pl);
+    li.appendChild(el('b', 'chip__p', 'P' + (p || 1)));
     const inp = el('input', 'chip__in');
     inp.type = 'text';
     inp.inputMode = 'numeric';
@@ -1514,7 +1540,6 @@ function renderMachineEdit(card, g) {
       if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
     });
     li.appendChild(inp);
-
     const x = el('button', 'chip__x');
     x.type = 'button';
     x.setAttribute('aria-label', '删除这个卡头');
@@ -1532,7 +1557,6 @@ function renderMachineEdit(card, g) {
   }
 
   g.comms.forEach((c, i) => addChip(c, i + 1));
-  card.appendChild(ul);
 
   const addLi = el('li', 'chip chip--add');
   const addBtn = el('button', 'chip__add');
@@ -1552,17 +1576,22 @@ function renderMachineEdit(card, g) {
   function renumber() {
     [...ul.querySelectorAll('.chip--edit')].forEach((li, i) => {
       const b = li.querySelector('.chip__p');
-      if (b) b.textContent = 'P' + (i + 1) + '：';
+      if (b) b.textContent = 'P' + (i + 1);
     });
   }
 
   function refreshMeta() {
     const n = ul.querySelectorAll('.chip__in').length;
-    head.querySelector('.machine__meta').textContent = n + ' 个卡头';
+    meta.textContent = n + ' 个卡头';
     $('machineLive').textContent = '现在 ' + n + ' 个卡头';
   }
 
-  const foot = el('footer', 'machine__foot');
+  const foot = el('footer', 'mf__acts');
+
+  const cancel = el('button', 'btn btn--sm btn--quiet', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => { EDIT_KEY = null; renderUnits(); });
+  foot.appendChild(cancel);
 
   const saveBtn = el('button', 'btn btn--sm btn--primary', '保存');
   saveBtn.type = 'button';
@@ -1576,19 +1605,19 @@ function renderMachineEdit(card, g) {
     saveBtn.dataset.loading = 'true';
     card.dataset.saving = 'true';
     try {
+      const brand = (g.kind || 'pusher') === 'pachinko' ? (brandVal || '').trim() : undefined;
       if (g.units.length > 1) {
         await api('/api/manage/machine/save', {
           shop_id: MSHOP.id, ids: g.units.map((u) => u.id),
-          name: nm, comms: cm.join(','), shared: cm.length > 1,
-          brand: brandIn ? brandIn.value.trim() : undefined,
+          name: nm, comms: cm.join(','), shared: cm.length > 1, brand,
         });
       } else {
         await api('/api/manage/unit/save', {
           id: g.units[0].id, shop_id: MSHOP.id,
-          name: nm, comms: cm.join(','), shared: cm.length > 1,
-          brand: brandIn ? brandIn.value.trim() : undefined,
+          name: nm, comms: cm.join(','), shared: cm.length > 1, brand,
         });
       }
+      BRANDS = null;
       toast('已保存');
       EDIT_KEY = null;
       await renderUnits();
@@ -1601,11 +1630,6 @@ function renderMachineEdit(card, g) {
     }
   });
   foot.appendChild(saveBtn);
-
-  const cancel = el('button', 'btn btn--sm btn--quiet', '取消');
-  cancel.type = 'button';
-  cancel.addEventListener('click', () => { EDIT_KEY = null; renderUnits(); });
-  foot.appendChild(cancel);
 
   card.appendChild(foot);
 
