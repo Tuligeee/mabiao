@@ -630,9 +630,9 @@ async function saveAndFetch() {
     const res = await api('/api/entry', { shop_id: S.shopId, day: S.day, items });
     $('saveHint').textContent = '已存 ' + res.saved + ' 台，正在拉宝点';
     await api('/api/fetch', { shop_id: S.shopId, day: S.day });
-    $('saveHint').textContent = '已保存并拉取';
-    toast('已保存');
-    await loadEntry();
+    $('saveHint').textContent = '已取数';
+    toast('已取数');
+    setView('recon');
   } catch (e) {
     $('saveHint').textContent = '拉取失败，读数已保存';
     toast(String(e.message || e), 'bad');
@@ -1864,12 +1864,16 @@ function bdQrDialog() {
   dlg.setAttribute('role', 'dialog');
   dlg.setAttribute('aria-modal', 'true');
   dlg.appendChild(el('h2', 'dlg__t', '扫码登录宝点'));
-  const tip = el('p', 'bd-dlg__tip', '用宝点 App 扫这个码');
+  const tip = el('p', 'bd-dlg__tip', '在电脑上打开这一页，用手机扫；只有手机就长按二维码保存，再用宝点 App 相册识别');
   dlg.appendChild(tip);
   const box = el('div', 'bd-dlg__qr');
   box.appendChild(el('p', 'bd-dlg__wait', '正在生成…'));
   dlg.appendChild(box);
   const acts = el('div', 'dlg__acts');
+  const saveImg = el('button', 'btn btn--quiet', '保存二维码');
+  saveImg.type = 'button';
+  saveImg.hidden = true;
+  acts.appendChild(saveImg);
   const cancel = el('button', 'btn btn--quiet', '关闭');
   cancel.type = 'button';
   acts.appendChild(cancel);
@@ -1893,6 +1897,16 @@ function bdQrDialog() {
       img.alt = '宝点登录二维码';
       img.src = /^data:/.test(r.png) ? r.png : ('data:image/png;base64,' + r.png);
       box.appendChild(img);
+      saveImg.hidden = false;
+      saveImg.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = img.src;
+        a.download = '宝点登录二维码.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast('已保存，用宝点 App 扫一扫 → 相册');
+      });
       timer = setInterval(async () => {
         if (!sid) return;
         try {
