@@ -1690,7 +1690,13 @@ async function importShops() {
       $('importStatus').textContent = '导入完成，可以逐店检查机台';
       btn.disabled = false;
 
-  const b = await api('/api/bootstrap');
+  let b;
+  try {
+    b = await api('/api/bootstrap');
+  } catch (e) {
+    showBootErr('bootstrap 失败：' + (e.message || e));
+    throw e;
+  }
       S.shops = b.shops;
       S.units = b.units;
       loadSettings();
@@ -1836,11 +1842,25 @@ async function boot() {
   }
 }
 
+function showBootErr(msg) {
+  const box = $('bootErr');
+  if (!box) { alert(msg); return; }
+  box.hidden = false;
+  box.textContent = String(msg);
+}
+
+window.addEventListener('error', (e) => {
+  showBootErr('脚本出错：' + (e.message || '') + '\n' + (e.filename || '') + ':' + (e.lineno || ''));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  showBootErr('未处理的异常：' + ((e.reason && (e.reason.message || e.reason)) || ''));
+});
+
 function applyRole() {
   const store = S.role === 'store';
   $('tools').hidden = false;
   const navOv = document.querySelector('.nav__item[data-view="overview"]');
-  if (navOv) navOv.hidden = store;
+  if (navOv) navOv.hidden = store;   // 门店看不到全链
   $('shopBtn').disabled = store;
   $('shopBtn').setAttribute('aria-label', store ? '当前门店' : '选择门店');
   if (store && S.view === 'overview') setView('entry');

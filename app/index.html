@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
-<link rel="stylesheet" href="theme.css?v=71">
-<link rel="stylesheet" href="app.css?v=71">
+<link rel="stylesheet" href="theme.css?v=72">
+<link rel="stylesheet" href="app.css?v=72">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
@@ -42,12 +42,15 @@
 </div>
 
 <div class="app">
+<div id="bootErr" hidden style="position:fixed;inset-inline:0;top:0;z-index:9999;padding:12px 16px;
+  background:#FEF3F2;border-bottom:1px solid #FECDCA;color:#B42318;font:14px/1.5 monospace;
+  white-space:pre-wrap"></div>
   <header class="topbar">
     <span class="brand">码表核对</span>
     <nav class="nav" aria-label="主视图">
       <button class="nav__item" type="button" data-view="home" aria-current="page">导航</button>
       <button class="nav__item" type="button" data-view="recon">核对</button>
-      <button class="nav__item" type="button" data-view="overview">全链</button>
+      <button class="nav__item" type="button" data-view="overview" hidden>全链</button>
       <button class="nav__item" type="button" data-view="settings">设置</button>
     </nav>
     <div class="tools" id="tools" hidden>
@@ -100,7 +103,7 @@
     </section>
 
     <!-- ============ 录入 ============ -->
-    <section class="pane" id="view-entry">
+    <section class="pane" id="view-entry" hidden>
       <div class="pane__head">
         <p class="eyebrow">录入</p>
         <h1 class="h1">抄码表</h1>
@@ -264,7 +267,7 @@
 </div>
 
 <script src="vendor/jsQR.js"></script>
-  <script src="ui.js?v=71"></script>
-<script src="app.js?v=71"></script>
+  <script src="ui.js?v=72"></script>
+<script src="app.js?v=72"></script>
 </body>
 </html>
