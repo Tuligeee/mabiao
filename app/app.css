@@ -774,11 +774,11 @@ body[data-scan="1"] .ctx { display: none; }
   inline-size: 100%; margin-block-end: var(--space-5);
   padding: var(--space-5);
   font: inherit; text-align: start; cursor: pointer;
-  color: var(--on-accent); background: var(--accent);
+  color: var(--on-solid); background: var(--ink);
   border: 0; border-radius: var(--radius-xl);
   transition: background var(--duration-fast) var(--ease-out);
 }
-.scan-cta:hover { background: var(--accent-hover); }
+.scan-cta:hover { background: var(--ink-hover); }
 .scan-cta:focus-visible { outline: none; box-shadow: var(--shadow-focus-ring); }
 .scan-cta svg { inline-size: var(--space-6); block-size: var(--space-6); margin-block-end: var(--space-2); }
 .scan-cta span { font-size: var(--text-xl); font-weight: var(--weight-semibold); }

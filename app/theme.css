@@ -26,6 +26,8 @@
   --hover-2:   #ECECEF;
   --disabled-bg: #F2F2F4;
   --on-solid:  #FFFFFF;
+  --on-accent: #FFFFFF;
+  --ink-hover: #24242A;
 
   /* 2px 步进，只用于小控件内部微调 */
   --space-0.5: calc(var(--space-1) / 2);
