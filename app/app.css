@@ -1010,14 +1010,9 @@ body[data-scanning="1"] { overflow: hidden; }
   padding: var(--space-5);
 }
 .mf__name {
-  inline-size: 100%; box-sizing: border-box;
-  font: inherit; font-size: var(--text-lg); font-weight: var(--weight-semibold);
-  color: var(--ink); background: transparent;
-  border: 0; border-block-end: 1px solid var(--line);
-  padding: 0 0 var(--space-2);
+  flex: 1; min-inline-size: 0;
+  font-size: var(--text-base); font-weight: var(--weight-semibold);
 }
-.mf__name:focus { outline: none; border-block-end-color: var(--accent); }
-.mf__meta { margin: var(--space-2) 0 var(--space-4); font-size: var(--text-xs); color: var(--ink-3); }
 
 .mf__row {
   display: flex; align-items: center; gap: var(--space-3);

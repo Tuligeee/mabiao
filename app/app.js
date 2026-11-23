@@ -1471,15 +1471,15 @@ function renderMachineEdit(card, g) {
   card.dataset.editing = 'true';
   card.setAttribute('aria-label', '编辑机台 ' + g.key);
 
-  const nameIn = el('input', 'mf__name');
+  const rowN = el('div', 'mf__row');
+  rowN.appendChild(el('span', 'mf__k', '名称'));
+  const nameIn = el('input', 'input mf__name');
   nameIn.type = 'text';
   nameIn.autocomplete = 'off';
   nameIn.value = g.key;
   nameIn.setAttribute('aria-label', '机台名');
-  card.appendChild(nameIn);
-
-  const meta = el('p', 'mf__meta', g.heads + ' 个卡头');
-  card.appendChild(meta);
+  rowN.appendChild(nameIn);
+  card.appendChild(rowN);
 
   // 品牌（只对弹珠机）
   let brandVal = g.brand || '';
@@ -1582,7 +1582,6 @@ function renderMachineEdit(card, g) {
 
   function refreshMeta() {
     const n = ul.querySelectorAll('.chip__in').length;
-    meta.textContent = n + ' 个卡头';
     $('machineLive').textContent = '现在 ' + n + ' 个卡头';
   }
 
