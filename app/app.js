@@ -1209,7 +1209,7 @@ async function brandCfg() {
   const tb = el('table', 'tbl tbl--tight');
   const thead = el('thead');
   const hr = el('tr');
-  ['品牌', '台数', '玩法', '码表投币数', ''].forEach((t, i) => {
+  ['品牌', '台数', '玩法', '码表显示', ''].forEach((t, i) => {
     const th = el('th', i === 1 ? 'num' : '', t);
     th.scope = 'col';
     hr.appendChild(th);
@@ -1225,7 +1225,7 @@ async function brandCfg() {
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
       bead_card: '投珠出卡' })[b.mode] || b.mode;
     tr.appendChild(el('td', '', modeName));
-    tr.appendChild(el('td', '', b.unit === 'bead' ? '记的是珠' : '记的是币'));
+    tr.appendChild(el('td', '', b.unit === 'bead' ? '投珠' : '投币'));
     const td = el('td');
     const b2 = el('button', 'btn btn--sm btn--quiet', '改');
     b2.type = 'button';
@@ -1292,7 +1292,7 @@ function brandDialog(b) {
   };
 
   mkGroup('玩法', MODES, mode, (v) => { mode = v; });
-  mkGroup('码表投币数', [['coin', '记的是币'], ['bead', '记的是珠']], unit, (v) => { unit = v; });
+  mkGroup('码表显示', [['coin', '投币'], ['bead', '投珠']], unit, (v) => { unit = v; });
 
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');

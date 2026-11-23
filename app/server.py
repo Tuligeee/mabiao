@@ -113,6 +113,8 @@ def ensure_codes():
             c.execute("ALTER TABLE units ADD COLUMN pos INTEGER")
         if "beads_per_coin" not in scols:
             c.execute("ALTER TABLE shops ADD COLUMN beads_per_coin REAL")
+        if "brand" not in ucols:
+            c.execute("ALTER TABLE units ADD COLUMN brand TEXT")
 
         # 门店编号 S01..S16
         todo = [dict(r) for r in c.execute(
@@ -140,6 +142,12 @@ def ensure_codes():
             seq[r["shop_id"]] = k2
             c.execute("UPDATE units SET code=? WHERE id=?",
                       ("%s-%03d" % (shops.get(r["shop_id"]) or "X", k2), r["id"]))
+
+        # 机台品牌：没填过的按机台名自动补一次，之后以库里存的为准
+        for r in c.execute("SELECT id, name FROM units "
+                           "WHERE (brand IS NULL OR brand='') AND kind='pachinko'"):
+            c.execute("UPDATE units SET brand=? WHERE id=?",
+                      (unit_brand(r["name"]), r["id"]))
 
         # 位置号：同一台机下按通讯ID顺序重排 P1..Pn。
         # 每次都全量重算 —— 只补 NULL 的话，删掉重建的机台会停在 P1（可乐风暴撞过一次）。
@@ -714,7 +722,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
             row_shop0 = shop_row(shop_id) or {}
             per_coin = row_shop0.get("beads_per_coin")
-            u_brand = unit_brand(u.get("name") or "")
+            u_brand = brand_of(u)
             m_unit = brand_unit(u_brand)
             if m_unit == "bead" and per_coin:
                 paid_beads = tin
@@ -850,8 +858,8 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "unit_id": u["id"], "name": u["name"], "team": u["team"], "shared": bool(u["shared"]),
             "active": bool(u["active"]),
             "kind": u.get("kind") or "pusher",
-            "brand": unit_brand(u["name"]) if (u.get("kind") == "pachinko") else None,
-            "fields": brand_flags(unit_brand(u["name"]))["fields"] if (u.get("kind") == "pachinko") else None,
+            "brand": brand_of(u) if (u.get("kind") == "pachinko") else None,
+            "fields": brand_flags(brand_of(u))["fields"] if (u.get("kind") == "pachinko") else None,
             "pos": u.get("pos"), "code": u.get("code"),
             "comms": comms, "has_card": any(c in have_card for c in comms),
             "prev_in": pv["in_r"] if pv else None,
@@ -1665,17 +1673,23 @@ def unit_brand(name: str) -> str:
     return s1 or s0 or (name or "")
 
 
+def brand_of(u) -> str:
+    """这台机属于哪个品牌：库里存的优先，没存才从机台名推。"""
+    return (u.get("brand") or "").strip() or unit_brand((u.get("name") or ""))
+
+
 def brand_list(shop_id: str = "") -> list:
     """当前有哪些机台品牌，各多少台，各自的设置。"""
     with conn() as c:
         if shop_id:
-            rs = c.execute("SELECT name FROM units WHERE kind='pachinko' AND active=1 "
+            rs = c.execute("SELECT name, brand FROM units WHERE kind='pachinko' AND active=1 "
                            "AND shop_id=?", (shop_id,)).fetchall()
         else:
-            rs = c.execute("SELECT name FROM units WHERE kind='pachinko' AND active=1").fetchall()
+            rs = c.execute("SELECT name, brand FROM units WHERE kind='pachinko' "
+                           "AND active=1").fetchall()
     cnt = {}
     for r in rs:
-        b = unit_brand(r["name"])
+        b = brand_of(dict(r))
         cnt[b] = cnt.get(b, 0) + 1
     with conn() as c:
         alias = {r["key"]: r["label"] for r in c.execute("SELECT key,label FROM brand_alias")}
@@ -1686,7 +1700,7 @@ def brand_list(shop_id: str = "") -> list:
     return out
 
 
-METER_UNITS = [("coin", "码表记的是币"), ("bead", "码表记的是珠")]
+METER_UNITS = [("coin", "投币"), ("bead", "投珠")]
 DEFAULT_UNIT = "coin"
 
 
@@ -1730,9 +1744,10 @@ def save_brand_flags(b: dict) -> dict:
     # 门店只能改自己店里有的品牌
     if is_store():
         own = resolve_shop(actor())
-        names = [r["name"] for r in conn().execute(
-            "SELECT name FROM units WHERE shop_id=? AND kind='pachinko' AND active=1", (own,))]
-        if brand not in {unit_brand(x) for x in names}:
+        rows = [dict(r) for r in conn().execute(
+            "SELECT name, brand FROM units WHERE shop_id=? AND kind='pachinko' AND active=1",
+            (own,))]
+        if brand not in {brand_of(x) for x in rows}:
             raise AuthError("这家店没有这个品牌")
     label = (b.get("label") or "").strip()
     if label and label != brand:
@@ -2027,8 +2042,9 @@ def save_machine(b: dict) -> dict:
 
         if merged_before:
             keep = units[0]["id"]
-            c.execute("UPDATE units SET name=?, shared=?, locked=1, active=1 WHERE id=?",
-                      (name, 1 if len(comms) > 1 else 0, keep))
+            c.execute("UPDATE units SET name=?, brand=?, shared=?, locked=1, active=1 WHERE id=?",
+                      (name, (b.get("brand") or "").strip() or None,
+                       1 if len(comms) > 1 else 0, keep))
             wanted = set(comms)
             for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (keep,)).fetchall():
                 if r["comm_id"] not in wanted:
@@ -2049,8 +2065,9 @@ def save_machine(b: dict) -> dict:
             label = "%s %s" % (name, cid)
             uid = by_comm.get(cid)
             if uid:
-                c.execute("UPDATE units SET name=?, shared=0, locked=1, active=1 WHERE id=?",
-                          (label, uid))
+                c.execute("UPDATE units SET name=?, brand=?, shared=0, locked=1, active=1 "
+                          "WHERE id=?",
+                          (label, (b.get("brand") or "").strip() or None, uid))
             else:
                 c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked) "
                           "VALUES(?,?,?,0,1,1) ON CONFLICT(shop_id,name) DO UPDATE SET "
