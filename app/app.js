@@ -1892,6 +1892,18 @@ function bdQrDialog() {
     try {
       const r = await api('/api/bd/login/start', {});
       sid = r.sid;
+      const inWx = /MicroMessenger/i.test(navigator.userAgent);
+      if (inWx && r.url) {
+        // 微信里直接打开登录页，不用扫码
+        const win = window.open(r.url, '_blank');
+        tip.textContent = win
+          ? '已打开微信登录页，确认后回到这里会自动完成'
+          : '点下面的按钮打开微信登录页';
+        const go = el('button', 'btn btn--primary bd-dlg__go', '打开微信确认登录');
+        go.type = 'button';
+        go.addEventListener('click', () => window.open(r.url, '_blank'));
+        dlg.insertBefore(go, box);
+      }
       box.innerHTML = '';
       const img = el('img', 'bd-dlg__img');
       img.alt = '宝点登录二维码';

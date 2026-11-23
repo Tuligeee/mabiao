@@ -1156,3 +1156,5 @@ body[data-scanning="1"] { overflow: hidden; }
   color: var(--ink-3); border-color: transparent; cursor: default;
 }
 .conn--btn[data-state="ok"]:hover { background: transparent; border-color: transparent; }
+
+.bd-dlg__go { inline-size: 100%; margin-block-end: var(--space-3); }

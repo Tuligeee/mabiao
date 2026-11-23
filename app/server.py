@@ -1785,7 +1785,8 @@ def api_bd_start(b: dict) -> dict:
     r = bd_call("/api/start", {"sys": "baodian", "wait": 2, "key": "meter"})
     if not r.get("ok"):
         raise RuntimeError(r.get("error") or "生成二维码失败")
-    return {"sid": r.get("sid"), "png": r.get("png") or "", "state": r.get("state") or ""}
+    return {"sid": r.get("sid"), "png": r.get("png") or "",
+            "url": r.get("url") or "", "state": r.get("state") or ""}
 
 
 def api_bd_poll(b: dict) -> dict:
