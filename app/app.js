@@ -403,7 +403,7 @@ async function loadEntry() {
   } else {
     bits.push('每台填 2 个累计读数');
   }
-  if (S.role === 'store') bits.push(S.day + ' 关门');
+  if (S.role === 'store') bits.push(S.day);
   $('entryLede').textContent = bits.join(' · ');
   if (!S.confirmed) {
     $('confirmPanel').hidden = false;
