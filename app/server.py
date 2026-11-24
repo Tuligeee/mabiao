@@ -2414,6 +2414,10 @@ def remove_unit(uid: int) -> dict:
         row = c.execute("SELECT shop_id FROM units WHERE id=?", (uid,)).fetchone()
         if row:
             guard_shop(row["shop_id"])
+        today = date.today().isoformat()
+        # 卡头归属封口，别在历史里继续挂着
+        c.execute("UPDATE comm_owner SET to_day=? WHERE unit_id=? AND to_day IS NULL",
+                  (today, uid))
         c.execute("DELETE FROM comms WHERE unit_id=?", (uid,))
         c.execute("DELETE FROM units WHERE id=?", (uid,))
     return {"ok": True}
