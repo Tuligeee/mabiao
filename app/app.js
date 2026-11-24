@@ -1799,6 +1799,7 @@ async function boot() {
       await loadEntry();
       if (S.view === 'recon') loadRecon();
       if (S.view === 'overview') loadOverview();
+      refreshBdState();
     },
   });
   shopPicker.set(shop ? shop.name : '未选门店');
@@ -1826,7 +1827,7 @@ async function boot() {
       sessionStorage.removeItem('bdSid');
       const poll = setInterval(async () => {
         try {
-          const st = await api('/api/bd/login/poll', { sid: pending });
+          const st = await api('/api/bd/login/poll', { sid: pending, shop_id: S.shopId });
           if (st.state === 'ok' && st.ok) {
             clearInterval(poll);
             toast('宝点已登录');
@@ -1868,13 +1869,14 @@ async function refreshBdState() {
   const btn = $('conn');
   if (!btn) return;
   try {
-    const st = await api('/api/bd/status');
+    const st = await api('/api/bd/status?shop_id=' + encodeURIComponent(S.shopId || ''));
     const ok = !!st.alive;
+    const own = st.source === 'shop';
     btn.dataset.state = ok ? 'ok' : 'bad';
     btn.title = ok
-      ? ('宝点已连接' + (st.exp_text ? '，有效到 ' + st.exp_text : ''))
+      ? ('宝点已连接' + (own ? '（本店）' : '（总部账号）') + (st.exp_text ? '，有效到 ' + st.exp_text : ''))
       : (st.exp_text ? '宝点登录已过期（' + st.exp_text + '），点这里扫码' : '宝点未登录，点这里扫码');
-    $('connText').textContent = ok ? '宝点已连接' : '宝点登录';
+    $('connText').textContent = ok ? (own ? '宝点已连接' : '宝点·总部') : '宝点登录';
     btn.setAttribute('aria-label', ok ? '宝点已连接' : '点击扫码登录宝点');
   } catch (e) { /* 忽略 */ }
 }
@@ -1886,7 +1888,7 @@ async function bdLoginClick() {
   btn.disabled = true;
   $('connText').textContent = '正在打开…';
   try {
-    const r = await api('/api/bd/login/start', {});
+    const r = await api('/api/bd/login/start', { shop_id: S.shopId });
     if (inWx && r.url) {
       try { sessionStorage.setItem('bdSid', r.sid || ''); } catch (e) { /* 忽略 */ }
       location.href = r.url;        // 直接跳微信登录页
@@ -1953,7 +1955,7 @@ function bdQrDialog(pre) {
       timer = setInterval(async () => {
         if (!sid) return;
         try {
-          const st = await api('/api/bd/login/poll', { sid });
+          const st = await api('/api/bd/login/poll', { sid, shop_id: S.shopId });
           if (st.state === 'ok' && st.ok) {
             stop();
             box.innerHTML = '';

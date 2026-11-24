@@ -876,7 +876,8 @@ body[data-scanning="1"] { overflow: hidden; }
 
 @media (max-width: 47.99em) {
   .tools { gap: var(--space-1); }
-  .tools .conn { display: none; }
+  /* 宝点登录按钮手机上保留 */
+    .conn--btn { padding: 5px 9px; font-size: 11px; }
   .pick--sm .pick__val { max-inline-size: 7rem; }
 }
 

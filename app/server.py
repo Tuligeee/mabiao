@@ -299,7 +299,16 @@ def classify(team_name: str) -> str:
 BD_LOGIN_BASE = (os.environ.get("BD_LOGIN_BASE") or "http://127.0.0.1:8770").rstrip("/")
 BD_KEY_FILE = os.environ.get("BD_LINK_KEY_FILE") or "/opt/bd-login/link_key.txt"
 # bd-login 按 key 另存的那份，和日报/套餐共用的 session.json 分开
-METER_BD_FILE = os.environ.get("METER_BD_FILE") or "/opt/taocan/.cache/sessions/meter.json"
+METER_BD_DIR = os.environ.get("METER_BD_DIR") or "/opt/taocan/.cache/sessions"
+# 全局那份（总部扫的），所有店兜底用
+SHARED_BD_FILE = os.environ.get("BD_SESSION_FILE") or "/opt/taocan/.cache/session.json"
+
+
+def meter_bd_file(shop_id: str = "") -> str:
+    """每家店自己那份登录态；没给门店就是旧的单份。"""
+    if not shop_id:
+        return os.path.join(METER_BD_DIR, "meter.json")
+    return os.path.join(METER_BD_DIR, "meter-%s.json" % shop_id)
 
 
 def bd_link_key() -> str:
@@ -310,17 +319,31 @@ def bd_link_key() -> str:
         return ""
 
 
-def bd_alive() -> dict:
-    """码表用的宝点登录态还行不行。"""
+def _bd_read(path: str) -> dict:
     try:
-        with open(METER_BD_FILE, encoding="utf-8") as f:
-            d = json.load(f)
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
-        return {"alive": False, "exp_text": "", "left_hours": -1, "account": ""}
-    exp = float(d.get("exp") or 0) or 0
-    left = (exp - time.time()) / 3600 if exp else -1
-    return {"alive": left > 0, "exp_text": (time.strftime("%Y-%m-%d %H:%M", time.localtime(exp)) if exp else ""),
-            "left_hours": round(left, 2), "account": ((d.get("ctx") or {}).get("user") or {}).get("name") or ""}
+        return {}
+
+
+def bd_alive(shop_id: str = "") -> dict:
+    """这家店的宝点登录态行不行；本店那份优先，没有再退回总部那份。"""
+    for src, path in (("shop", meter_bd_file(shop_id)),
+                      ("shared", SHARED_BD_FILE)):
+        if src == "shop" and not shop_id:
+            path = os.path.join(METER_BD_DIR, "meter.json")
+        d = _bd_read(path)
+        exp = float(d.get("exp") or 0) or 0
+        if not exp:
+            continue
+        left = (exp - time.time()) / 3600
+        if left > 0:
+            return {"alive": True, "source": src,
+                    "exp_text": time.strftime("%Y-%m-%d %H:%M", time.localtime(exp)),
+                    "left_hours": round(left, 2),
+                    "account": ((d.get("ctx") or {}).get("user") or {}).get("name") or ""}
+    return {"alive": False, "source": "", "exp_text": "", "left_hours": -1, "account": ""}
 
 
 def bd_call(path: str, body: dict, timeout=90) -> dict:
@@ -333,16 +356,20 @@ def bd_call(path: str, body: dict, timeout=90) -> dict:
 
 # ---------------------------------------------------------------- 宝点
 class Baodian:
-    def __init__(self):
+    def __init__(self, shop_id: str = ""):
         if SHARED not in sys.path:
             sys.path.insert(0, SHARED)
         import baodian_session as S            # noqa: E402
         self.S = S
-        # 码表自己扫码登录的那份优先；没有/过期再退回全局那份
+        # 本店扫码登录那份优先；没有/过期再退回总部那份
         old_file = getattr(S, "SESSION_FILE", None)
         try:
-            if os.path.exists(METER_BD_FILE) and bd_alive()["alive"]:
-                S.SESSION_FILE = METER_BD_FILE
+            own = meter_bd_file(shop_id)
+            if shop_id and os.path.exists(own):
+                d = _bd_read(own)
+                exp = float(d.get("exp") or 0) or 0
+                if exp > time.time():
+                    S.SESSION_FILE = own
             self.d = S.as_login_dict()
         finally:
             if old_file is not None:
@@ -404,21 +431,33 @@ _BD = None
 _BD_ERR = None
 
 
-def baodian() -> Baodian:
+_BD_BY_SHOP: dict = {}
+
+
+def baodian(shop_id: str = "") -> Baodian:
     global _BD, _BD_ERR
-    if _BD is None:
-        try:
-            _BD = Baodian()
-            _BD_ERR = None
-        except Exception as e:                      # 登录态失效
-            _BD_ERR = str(e)[:300]
-            raise RuntimeError(_BD_ERR)
-    return _BD
+    key = shop_id or ""
+    if key and key in _BD_BY_SHOP:
+        return _BD_BY_SHOP[key]
+    if not key and _BD is not None:
+        return _BD
+    try:
+        bd = Baodian(key)
+    except Exception as e:                      # 登录态失效
+        _BD_ERR = str(e)[:300]
+        raise RuntimeError(_BD_ERR)
+    _BD_ERR = None
+    if key:
+        _BD_BY_SHOP[key] = bd
+    else:
+        _BD = bd
+    return bd
 
 
 def reset_baodian():
     global _BD
     _BD = None
+    _BD_BY_SHOP.clear()
 
 
 # ---------------------------------------------------------------- 数据库
@@ -520,7 +559,7 @@ def shop_row_by_name(name: str):
 
 def shop_of(d: dict):
     """库里存的门店 → 宝点会话里的门店对象"""
-    bd = baodian()
+    bd = baodian(d.get("id") or "")
     for s in bd.shops():
         if s["shopName"] == d["name"]:
             return s
@@ -597,7 +636,7 @@ def sync_units_best(shop_id: str) -> dict:
 
     不用当天：设备当天可能没全上报，会少几台。
     """
-    bd = baodian()
+    bd = baodian(shop_id)
     shop = shop_of(shop_row(shop_id))
     best, best_n, best_day = None, -1, None
     for i in range(1, 4):
@@ -647,7 +686,7 @@ def fetch_day(shop_id: str, day: str) -> dict:
     """拉一天的上币 + 下币，落 card_daily。"""
     d = shop_row(shop_id)
     shop = shop_of(d)
-    bd = baodian()
+    bd = baodian(shop_id)
     up = bd.fetch_up(shop, day)
     time.sleep(0.6)
     down = bd.fetch_down(shop, day)
@@ -1202,7 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, save_readings(b["shop_id"], b["day"], b.get("items") or []))
             if p == "/api/fetch":
                 sid, day = b["shop_id"], b["day"]
-                devices = baodian().fetch_up(shop_of(shop_row(sid)), day)
+                devices = baodian(sid).fetch_up(shop_of(shop_row(sid)), day)
                 sync_units(sid, devices)
                 r = fetch_day(sid, day)
                 return self._send(200, {"ok": True, **r})
@@ -1776,13 +1815,19 @@ def brand_flags(brand: str) -> dict:
 
 
 def api_bd_status(q) -> dict:
-    st = bd_alive()
-    return {"ok": True, **st}
+    sid = (q.get("shop_id") or [""])[0]
+    if not sid:
+        try:
+            sid = resolve_shop(actor()) or ""
+        except Exception:
+            sid = ""
+    return {"ok": True, **bd_alive(sid)}
 
 
 def api_bd_start(b: dict) -> dict:
     """生成一个宝点登录二维码，扫完会另存成码表专用会话。"""
-    r = bd_call("/api/start", {"sys": "baodian", "wait": 2, "key": "meter"})
+    sid = guard_shop((b.get("shop_id") or [""])[0] or (resolve_shop(actor()) or ""))
+    r = bd_call("/api/start", {"sys": "baodian", "wait": 2, "key": "meter-" + sid})
     if not r.get("ok"):
         raise RuntimeError(r.get("error") or "生成二维码失败")
     return {"sid": r.get("sid"), "png": r.get("png") or "",
@@ -1793,7 +1838,8 @@ def api_bd_poll(b: dict) -> dict:
     sid = (b.get("sid") or "").strip()
     if not sid:
         raise RuntimeError("缺 sid")
-    r = bd_call("/api/status", {"sid": sid, "key": "meter"})
+    shop_id = guard_shop((b.get("shop_id") or [""])[0] or (resolve_shop(actor()) or ""))
+    r = bd_call("/api/status", {"sid": sid, "key": "meter-" + shop_id})
     out = {"ok": bool(r.get("ok")), "state": r.get("state") or "",
            "error": r.get("error") or "", "err": r.get("err") or ""}
     if r.get("state") == "ok" and out["ok"]:
