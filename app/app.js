@@ -700,7 +700,7 @@ function renderRecon() {
            ['差', 'num']] : [])
       .concat(hasF('p_tokens') && hasF('p_out')
         ? [['投币出珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
-           ['返珠率', 'num']] : [])
+           ['出卡', 'num'], ['返珠率', 'num']] : [])
       .concat([['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
@@ -742,6 +742,8 @@ function renderRecon() {
         const kp = el('td', 'num lead', pm.keep === null || pm.keep === undefined ? '-' : fmt(pm.keep));
         if (pm.keep !== null && pm.keep !== undefined && pm.keep < 0) kp.dataset.tone = 'bad';
         tr.appendChild(kp);
+        tr.appendChild(el('td', 'num',
+          pm.cards === null || pm.cards === undefined ? '-' : fmt(pm.cards)));
         tr.appendChild(el('td', 'num',
           pm.rate === null || pm.rate === undefined ? '-' : (pm.rate * 100).toFixed(1) + '%'));
       }

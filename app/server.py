@@ -480,6 +480,10 @@ CREATE TABLE IF NOT EXISTS units(
 CREATE TABLE IF NOT EXISTS comms(
   comm_id TEXT PRIMARY KEY, unit_id INTEGER NOT NULL, console_no TEXT, team TEXT,
   device TEXT, updated_at TEXT);
+-- 卡头归属历史：一个卡头哪天起归哪台机，换机台时旧行封口、新行开张
+CREATE TABLE IF NOT EXISTS comm_owner(
+  comm_id TEXT, unit_id INTEGER, shop_id TEXT,
+  from_day TEXT, to_day TEXT, PRIMARY KEY(comm_id, from_day));
 CREATE TABLE IF NOT EXISTS readings(
   shop_id TEXT, unit_id INTEGER, day TEXT, in_r REAL, out_r REAL,
   note TEXT, updated_at TEXT, PRIMARY KEY(shop_id, unit_id, day));
@@ -497,6 +501,13 @@ CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 def init_db():
     with conn() as c:
         c.executescript(SCHEMA)
+        # 老库：把当前 comms 归属补成历史（从 EPOCH 起一直归这台机）
+        if not c.execute("SELECT 1 FROM comm_owner LIMIT 1").fetchone():
+            for r in c.execute("SELECT m.comm_id, m.unit_id, u.shop_id FROM comms m "
+                               "JOIN units u ON u.id=m.unit_id"):
+                c.execute("INSERT OR IGNORE INTO comm_owner(comm_id,unit_id,shop_id,from_day,to_day) "
+                          "VALUES(?,?,?,?,NULL)", (r["comm_id"], r["unit_id"], r["shop_id"], EPOCH_DAY))
+            c.commit()          # 先放锁，ensure_codes 会另开连接
         # 老库补列
         cols = [r["name"] for r in c.execute("PRAGMA table_info(shops)")]
         if "units_checked" not in cols:
@@ -656,13 +667,47 @@ def sync_units_best(shop_id: str) -> dict:
     return {"devices": best_n, "day": best_day}
 
 
+EPOCH_DAY = "1970-01-01"
+
+
+def comm_owner_set(c, comm_id: str, unit_id: int, shop_id: str, day: str):
+    """把卡头归属改到 unit_id，生效日 day；旧归属封口到 day。"""
+    row = c.execute("SELECT unit_id, shop_id, from_day, to_day FROM comm_owner "
+                    "WHERE comm_id=? ORDER BY from_day DESC LIMIT 1", (comm_id,)).fetchone()
+    if row and row["unit_id"] == unit_id and (row["to_day"] is None or row["to_day"] > day):
+        return                                     # 没变，别重复记
+    if row:
+        c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND from_day=? "
+                  "AND (to_day IS NULL OR to_day>?)",
+                  (day, comm_id, row["from_day"], day))
+    # 回到原机台：把封口线接上，不新开一行
+    back = c.execute("UPDATE comm_owner SET to_day=NULL WHERE comm_id=? AND unit_id=? "
+                     "AND to_day=?", (comm_id, unit_id, day))
+    if back.rowcount:
+        return
+    c.execute("INSERT OR REPLACE INTO comm_owner(comm_id, unit_id, shop_id, from_day, to_day) "
+              "VALUES(?,?,?,?,NULL)", (comm_id, unit_id, shop_id, day))
+
+
+def comms_on(unit_id: int, day: str) -> list:
+    """this unit 在 day 这天挂哪些卡头（历史归属口径）。"""
+    with conn() as c:
+        return [str(r["comm_id"]) for r in c.execute(
+            "SELECT DISTINCT comm_id FROM comm_owner WHERE unit_id=? AND from_day<=? "
+            "AND (to_day IS NULL OR to_day>?) ORDER BY comm_id", (unit_id, day, day))]
+
+
 def put_comm(c, d, unit_id):
+    cid = str(d.get("commId"))
     c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
               "VALUES(?,?,?,?,?,?) ON CONFLICT(comm_id) DO UPDATE SET "
               "unit_id=excluded.unit_id, console_no=excluded.console_no, "
               "team=excluded.team, device=excluded.device, updated_at=excluded.updated_at",
-              (str(d.get("commId")), unit_id, d.get("consoleNo"),
+              (cid, unit_id, d.get("consoleNo"),
                d.get("projectTeamName"), d.get("deviceName"), now()))
+    u = c.execute("SELECT shop_id FROM units WHERE id=?", (unit_id,)).fetchone()
+    if u:
+        comm_owner_set(c, cid, unit_id, u["shop_id"], date.today().isoformat())
 
 
 def units_of(shop_id: str, active_only: bool = True, kind: str | None = None) -> list:
@@ -780,7 +825,9 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
 
     rows = []
     for u in units:
-        comms = [str(x["comm_id"]) for x in u["comms"]]
+        # 用「当天归属」的卡头，卡头换过机台也不改写历史
+        hist = comms_on(u["id"], day)
+        comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
         got = [cards[c] for c in comms if c in cards]
         up = sum((g["up_native"] or 0) + (g["up_give"] or 0) for g in got) if got else None
         down = sum((g["down_qty"] or 0) for g in got) / RATE if got else None
@@ -2149,14 +2196,18 @@ def save_unit(b: dict) -> dict:
                             (shop_id, name)).fetchone()["id"]
         # 先解绑不在新清单里的通讯ID
         keep = set(comms)
+        today = date.today().isoformat()
         for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (uid,)):
             if r["comm_id"] not in keep:
                 c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
+                c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
+                          (today, r["comm_id"]))
         for cid in comms:
             c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
                       "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
                       "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
                       (cid, uid, now()))
+            comm_owner_set(c, cid, uid, shop_id, today)
     return {"ok": True, "id": uid}
 
 
