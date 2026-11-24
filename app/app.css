@@ -1159,3 +1159,113 @@ body[data-scanning="1"] { overflow: hidden; }
 .conn--btn[data-state="ok"]:hover { background: transparent; border-color: transparent; }
 
 .bd-dlg__go { inline-size: 100%; margin-block-end: var(--space-3); }
+
+/* 手机顶栏：两行，第一行品牌 + 工具，第二行导航 */
+@media (max-width: 47.99em) {
+  .topbar {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "brand tools" "nav nav";
+    align-items: center;
+    gap: var(--space-2) var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    block-size: auto;
+  }
+  .brand { grid-area: brand; font-size: var(--text-sm); white-space: nowrap; }
+  .tools { grid-area: tools; justify-content: flex-end; gap: var(--space-1); flex-wrap: nowrap; }
+  .nav { grid-area: nav; overflow-x: auto; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav__item { white-space: nowrap; }
+
+  /* 门店选择器：只留短名 */
+  .pick--sm .pick__val { max-inline-size: 5.5rem; }
+  .pick--sm .pick__btn { padding-inline: var(--space-2); }
+
+  /* 宝点按钮：只留圆点 + 短词 */
+  .conn--btn { padding: 5px 8px; font-size: 11px; gap: 4px; }
+
+  /* 退出：图标化 */
+  .btn--sm.btn--quiet { padding-inline: var(--space-2); }
+}
+
+/* 手机：门店用户只有一家店，顶栏不占位显示门店选择器 */
+@media (max-width: 47.99em) {
+  body[data-role="store"] .tools .pick:first-child { display: none; }
+  .tools { flex: 0 0 auto; }
+  .conn--btn { flex: none; }
+  .conn--btn #connText { white-space: nowrap; }
+}
+
+/* 手机：抄码表卡片压扁，四个数一行 */
+@media (max-width: 47.99em) {
+  .lrow { padding: var(--space-3); }
+  .lrow__id { flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+  .lrow__name { font-size: var(--text-base); }
+  .lrow__prev { flex-basis: 100%; font-size: 11px; }
+  .lrow__inputs[data-n="4"] { grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+  .lrow__inputs[data-n="2"] { grid-template-columns: repeat(2, 1fr); gap: var(--space-2); }
+  .cell { display: flex; flex-direction: column; gap: 2px; }
+  .cell__k { font-size: 11px; color: var(--ink-3); }
+  .input--num { block-size: var(--space-11); font-size: var(--text-base); padding-inline: var(--space-2); }
+  .cell__d { grid-column: auto; text-align: start; font-size: 11px; min-inline-size: 0; }
+  .ledger { gap: var(--space-3); }
+  .pane { padding: var(--space-5) var(--space-4) calc(var(--space-24) + var(--space-6)); }
+  .h1 { font-size: var(--text-3xl); }
+  .lede { font-size: var(--text-sm); }
+}
+
+/* 手机：再紧一档 */
+@media (max-width: 47.99em) {
+  .lrow { padding: 10px var(--space-3); border-radius: var(--radius-lg); }
+  .lrow__id { gap: 0 var(--space-2); }
+  .lrow__prev { flex-basis: auto; margin-inline-start: auto; }
+  .lrow__inputs { margin-block-start: var(--space-2); }
+  .input--num { block-size: 40px; }
+  .ledger { gap: 8px; }
+  .cell { gap: 1px; }
+}
+
+/* 手机：核对表格变卡片，一机一行卡 */
+@media (max-width: 47.99em) {
+  .card--flush { background: transparent; border: 0; }
+  .tbl { display: block; }
+  .tbl thead { display: none; }
+  .tbl tbody { display: block; }
+  .tbl tr {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    margin-block-end: 8px;
+  }
+  .tbl td {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--space-3);
+    padding: 2px 0; border: 0;
+  }
+  .tbl td::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px; color: var(--ink-3);
+  }
+  .tbl td.name {
+    display: block; font-size: var(--text-base); font-weight: var(--weight-semibold);
+    padding-block-end: var(--space-1);
+  }
+  .tbl td.name::before { display: none; }
+  .tbl td.reason { justify-content: flex-start; }
+  #view-recon .figure__v { font-size: var(--text-4xl); }
+}
+
+@media (max-width: 47.99em) {
+  /* 卡片里没内容的格子不占行（比如没填原因时的「原因」） */
+  .tbl td:empty { display: none; }
+  .tbl td.reason { padding-block-start: var(--space-2); }
+}
+
+/* 手机：表格一律变卡片，避免窄列把中文压成竖排 */
+@media (max-width: 47.99em) {
+  .tbl td { white-space: normal; }
+  .tbl th, .tbl td { inline-size: auto; }
+}

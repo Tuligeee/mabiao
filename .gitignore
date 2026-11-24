@@ -49,3 +49,6 @@ _brand*.txt
 _log.txt
 _patch_*.py
 
+
+_preview/
+

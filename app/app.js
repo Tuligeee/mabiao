@@ -404,7 +404,9 @@ async function loadEntry() {
   } else {
     bits.push('每台填 2 个累计读数');
   }
-  if (S.role === 'store') bits.push(S.day);
+  if (S.role === 'store') {
+    bits.push(window.matchMedia('(max-width: 47.99em)').matches ? S.day.slice(5) : S.day);
+  }
   $('entryLede').textContent = bits.join(' · ');
   if (!S.confirmed) {
     $('confirmPanel').hidden = false;
@@ -756,6 +758,10 @@ function renderRecon() {
     st.appendChild(statusTag(r.status));
     tr.appendChild(st);
     tr.appendChild(reasonCell(r));
+    // 手机上每行变卡片，用 data-label 显示列名
+    [...tr.children].forEach((td, i) => {
+      if (cols[i] && cols[i][0]) td.dataset.label = cols[i][0];
+    });
     body.appendChild(tr);
   });
 }
@@ -1048,8 +1054,12 @@ async function loadSettings() {
   body.innerHTML = '';
   d.rows.forEach((r) => {
     const tr = el('tr');
-    tr.appendChild(el('td', 'name', r.name));
-    tr.appendChild(el('td', 'num', nf.format(r.units)));
+    const tdName = el('td', 'name', r.name);
+    tdName.dataset.label = '门店';
+    tr.appendChild(tdName);
+    const tdN = el('td', 'num', nf.format(r.units));
+    tdN.dataset.label = '码表机台';
+    tr.appendChild(tdN);
     const td = el('td');
     const b1 = el('button', 'btn btn--sm', '机台');
     b1.type = 'button';
@@ -1258,12 +1268,20 @@ async function brandCfg() {
   const body = el('tbody');
   BRANDS.forEach((b) => {
     const tr = el('tr');
-    tr.appendChild(el('td', 'name', b.label || b.brand));
-    tr.appendChild(el('td', 'num', String(b.units)));
+    const bName = el('td', 'name', b.label || b.brand);
+    bName.dataset.label = '品牌';
+    tr.appendChild(bName);
+    const bUnits = el('td', 'num', String(b.units));
+    bUnits.dataset.label = '台数';
+    tr.appendChild(bUnits);
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
       bead_card: '投珠出卡' })[b.mode] || b.mode;
-    tr.appendChild(el('td', '', modeName));
-    tr.appendChild(el('td', '', b.unit === 'bead' ? '投珠' : '投币'));
+    const bMode = el('td', '', modeName);
+    bMode.dataset.label = '玩法';
+    tr.appendChild(bMode);
+    const bUnit = el('td', '', b.unit === 'bead' ? '投珠' : '投币');
+    bUnit.dataset.label = '码表显示';
+    tr.appendChild(bUnit);
     const td = el('td');
     const b2 = el('button', 'btn btn--sm brand-edit', '编辑');
     b2.type = 'button';
@@ -1876,7 +1894,9 @@ async function refreshBdState() {
     btn.title = ok
       ? ('宝点已连接' + (own ? '（本店）' : '（总部账号）') + (st.exp_text ? '，有效到 ' + st.exp_text : ''))
       : (st.exp_text ? '宝点登录已过期（' + st.exp_text + '），点这里扫码' : '宝点未登录，点这里扫码');
-    $('connText').textContent = ok ? (own ? '宝点已连接' : '宝点·总部') : '宝点登录';
+    $('connText').textContent = ok
+      ? (own ? '宝点已连接' : '宝点·总部')
+      : '宝点登录';
     btn.setAttribute('aria-label', ok ? '宝点已连接' : '点击扫码登录宝点');
   } catch (e) { /* 忽略 */ }
 }
@@ -1884,22 +1904,17 @@ async function refreshBdState() {
 async function bdLoginClick() {
   const btn = $('conn');
   if (btn.dataset.state === 'ok') { refreshBdState(); return; }
-  const inWx = /MicroMessenger/i.test(navigator.userAgent);
   btn.disabled = true;
-  $('connText').textContent = '正在打开…';
+  const old = $('connText').textContent;
+  $('connText').textContent = '…';
   try {
     const r = await api('/api/bd/login/start', { shop_id: S.shopId });
-    if (inWx && r.url) {
-      try { sessionStorage.setItem('bdSid', r.sid || ''); } catch (e) { /* 忽略 */ }
-      location.href = r.url;        // 直接跳微信登录页
-      return;
-    }
     bdQrDialog(r);
   } catch (e) {
     toast(String(e.message || e), 'bad');
   } finally {
     btn.disabled = false;
-    if (!inWx) refreshBdState();
+    $('connText').textContent = old;
   }
 }
 
@@ -1909,7 +1924,10 @@ function bdQrDialog(pre) {
   dlg.setAttribute('role', 'dialog');
   dlg.setAttribute('aria-modal', 'true');
   dlg.appendChild(el('h2', 'dlg__t', '扫码登录宝点'));
-  const tip = el('p', 'bd-dlg__tip', '在电脑上打开这一页，用手机扫；只有手机就长按二维码保存，再用宝点 App 相册识别');
+  const inWx = /MicroMessenger/i.test(navigator.userAgent);
+  const tip = el('p', 'bd-dlg__tip', inWx
+    ? '长按下面的二维码 →「识别图中二维码」→ 确认登录'
+    : '用手机微信扫这个码，扫完这里会自动完成');
   dlg.appendChild(tip);
   const box = el('div', 'bd-dlg__qr');
   box.appendChild(el('p', 'bd-dlg__wait', '正在生成…'));
@@ -1992,6 +2010,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 function applyRole() {
   const store = S.role === 'store';
+  document.body.dataset.role = store ? 'store' : 'hq';
   $('tools').hidden = false;
   const navOv = document.querySelector('.nav__item[data-view="overview"]');
   if (navOv) navOv.hidden = store;   // 门店看不到全链
