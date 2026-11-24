@@ -113,6 +113,7 @@ function welcomeDialog(b) {
   go.type = 'button';
   acts.appendChild(go);
   dlg.appendChild(acts);
+  if (perWrap) dlg.insertBefore(perWrap, acts);
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   go.focus();
@@ -1140,7 +1141,6 @@ async function renderUnits() {
     if (ADD_KIND === grp.kind) wrap.appendChild(addMachineForm(grp.kind));
     if (grp.kind === 'pachinko') {
       wrap.appendChild(await brandCfg());
-      wrap.appendChild(pachinkoCfg());
     }
 
     const grid = el('div', 'machines');
@@ -1162,7 +1162,131 @@ async function renderUnits() {
 let ADD_KIND = null;
 
 function addMachineForm(kind) {
-  const box = el('div', 'add-form');
+  const box = el('div', 'add-panel');
+
+  // ---------- 上半：从宝点拉清单勾选 ----------
+  const head = el('div', 'add-panel__head');
+  head.appendChild(el('span', 'add-panel__title', '从宝点添加'));
+  const pull = el('button', 'btn btn--sm', '拉取机台清单');
+  pull.type = 'button';
+  head.appendChild(pull);
+  box.appendChild(head);
+
+  const listBox = el('div', 'add-panel__list');
+  box.appendChild(listBox);
+
+  const bulkActs = el('div', 'add-panel__acts');
+  const addSel = el('button', 'btn btn--sm btn--primary', '添加选中');
+  addSel.type = 'button';
+  addSel.disabled = true;
+  bulkActs.appendChild(addSel);
+  bulkActs.hidden = true;
+  box.appendChild(bulkActs);
+
+  pull.addEventListener('click', async () => {
+    pull.disabled = true;
+    pull.textContent = '拉取中…';
+    listBox.innerHTML = '';
+    listBox.appendChild(el('p', 'add-panel__hint', '正在从宝点取最近三天的机台…'));
+    try {
+      const d = await api('/api/manage/devices?shop_id=' + encodeURIComponent(MSHOP.id));
+      const mine = (d.rows || []).filter((x) => x.kind === kind);
+      listBox.innerHTML = '';
+      if (!mine.length) {
+        listBox.appendChild(el('p', 'add-panel__hint', '宝点最近三天没有这类机台'));
+        return;
+      }
+      const tb = el('table', 'tbl tbl--tight add-tbl');
+      const thead = el('thead');
+      const hr = el('tr');
+      const thAll = el('th');
+      const cbAll = el('input');
+      cbAll.type = 'checkbox';
+      cbAll.setAttribute('aria-label', '全选未添加的');
+      thAll.appendChild(cbAll);
+      hr.appendChild(thAll);
+      ['机台', '通讯ID', '类型', '状态'].forEach((t) => {
+        const th = el('th', '', t);
+        th.scope = 'col';
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      tb.appendChild(thead);
+
+      const body = el('tbody');
+      const cbs = [];
+      mine.forEach((x) => {
+        const tr = el('tr');
+        if (x.added) tr.dataset.done = 'true';
+        const td0 = el('td');
+        if (!x.added) {
+          const cb = el('input');
+          cb.type = 'checkbox';
+          cb.value = x.comm;
+          cb.dataset.name = x.name;
+          cb.setAttribute('aria-label', '选择 ' + x.name + ' ' + x.comm);
+          cbs.push(cb);
+          td0.appendChild(cb);
+        }
+        tr.appendChild(td0);
+        tr.appendChild(el('td', 'name', x.name));
+        tr.appendChild(el('td', '', x.comm));
+        tr.appendChild(el('td', '', x.kind === 'pachinko' ? '弹珠机' : '推币机'));
+        tr.appendChild(el('td', '', x.added ? '已在系统里' : '可添加'));
+        body.appendChild(tr);
+      });
+      tb.appendChild(body);
+      listBox.appendChild(tb);
+
+      const sync = () => {
+        const n = cbs.filter((c) => c.checked).length;
+        addSel.disabled = n === 0;
+        addSel.textContent = n ? ('添加选中 ' + n + ' 台') : '添加选中';
+      };
+      cbs.forEach((c) => c.addEventListener('change', sync));
+      cbAll.addEventListener('change', () => {
+        cbs.forEach((c) => { c.checked = cbAll.checked; });
+        sync();
+      });
+      bulkActs.hidden = false;
+      sync();
+
+      addSel.onclick = async () => {
+        const picked = cbs.filter((c) => c.checked);
+        if (!picked.length) return;
+        addSel.disabled = true;
+        addSel.textContent = '添加中…';
+        let ok = 0;
+        for (const cb of picked) {
+          try {
+            await api('/api/manage/unit/save', {
+              shop_id: MSHOP.id,
+              name: cb.dataset.name + ' ' + cb.value,
+              comms: cb.value,
+              kind,
+              shared: false,
+            });
+            ok += 1;
+          } catch (e) { /* 单台失败不影响其他 */ }
+        }
+        toast('已添加 ' + ok + ' 台');
+        ADD_KIND = null;
+        BRANDS = null;
+        await renderUnits();
+      };
+    } catch (e) {
+      listBox.innerHTML = '';
+      listBox.appendChild(el('p', 'add-panel__hint', String(e.message || e)));
+    } finally {
+      pull.disabled = false;
+      pull.textContent = '重新拉取';
+    }
+  });
+
+  // ---------- 下半：手工添加（宝点里没有的） ----------
+  const manual = el('details', 'add-panel__manual');
+  manual.appendChild(el('summary', '', '手工添加（宝点里没有的机台）'));
+  const form = el('div', 'add-form');
 
   const f1 = el('label', 'field');
   f1.appendChild(el('span', 'field__label', '机台名'));
@@ -1171,7 +1295,7 @@ function addMachineForm(kind) {
   name.autocomplete = 'off';
   name.placeholder = kind === 'pachinko' ? '塔兰弹珠机-017' : '凤凰城';
   f1.appendChild(name);
-  box.appendChild(f1);
+  form.appendChild(f1);
 
   const f2 = el('label', 'field');
   f2.appendChild(el('span', 'field__label', '通讯ID，多个用逗号隔开'));
@@ -1180,7 +1304,7 @@ function addMachineForm(kind) {
   comms.autocomplete = 'off';
   comms.placeholder = '733720,733895';
   f2.appendChild(comms);
-  box.appendChild(f2);
+  form.appendChild(f2);
 
   const acts = el('div', 'add-form__acts');
   const save = el('button', 'btn btn--sm btn--primary', '保存');
@@ -1190,7 +1314,9 @@ function addMachineForm(kind) {
   cancel.addEventListener('click', () => { ADD_KIND = null; renderUnits(); });
   acts.appendChild(save);
   acts.appendChild(cancel);
-  box.appendChild(acts);
+  form.appendChild(acts);
+  manual.appendChild(form);
+  box.appendChild(manual);
 
   save.addEventListener('click', async () => {
     const nm = name.value.trim();
@@ -1205,6 +1331,7 @@ function addMachineForm(kind) {
       });
       toast('已新增');
       ADD_KIND = null;
+      BRANDS = null;
       await renderUnits();
     } catch (e) {
       toast(String(e.message || e), 'bad');
@@ -1212,7 +1339,6 @@ function addMachineForm(kind) {
     }
   });
 
-  setTimeout(() => name.focus(), 0);
   return box;
 }
 
@@ -1351,6 +1477,22 @@ function brandDialog(b) {
   mkGroup('玩法', MODES, mode, (v) => { mode = v; });
   mkGroup('码表显示', [['coin', '投币'], ['bead', '投珠']], unit, (v) => { unit = v; });
 
+  let perCoin = b.per_coin || '';
+  let perWrap = null;
+  if (b.fields && b.fields.indexOf('p_tokens') >= 0) {
+    const pw = el('label', 'machine-cfg__f');
+    pw.appendChild(el('span', 'machine-cfg__k', '一币 = 几珠'));
+    const pi = el('input', 'input machine-cfg__in');
+    pi.type = 'text';
+    pi.inputMode = 'decimal';
+    pi.value = perCoin;
+    pi.placeholder = '20';
+    pi.setAttribute('aria-label', '一币等于几珠');
+    pi.addEventListener('input', () => { perCoin = pi.value.trim(); });
+    pw.appendChild(pi);
+    perWrap = pw;
+  }
+
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
   cancel.type = 'button';
@@ -1361,7 +1503,8 @@ function brandDialog(b) {
     save.disabled = true;
     try {
       await api('/api/manage/brand/flags',
-        { brand: b.brand, label: nameIn.value.trim() || b.brand, mode, unit });
+        { brand: b.brand, label: nameIn.value.trim() || b.brand, mode, unit,
+          per_coin: perCoin });
       BRANDS = null;
       scrim.remove();
       await renderUnits();
@@ -1379,47 +1522,6 @@ function brandDialog(b) {
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   save.focus();
-}
-
-function pachinkoCfg() {
-  const row = el('div', 'machine-cfg');
-
-  const mk = (label, key, placeholder) => {
-    const f = el('label', 'machine-cfg__f');
-    f.appendChild(el('span', 'machine-cfg__k', label));
-    const inp = el('input', 'input machine-cfg__in');
-    inp.type = 'text';
-    inp.inputMode = 'decimal';
-    inp.placeholder = placeholder;
-    inp.value = MSHOP[key] === null || MSHOP[key] === undefined ? '' : MSHOP[key];
-    f.appendChild(inp);
-    row.appendChild(f);
-    return inp;
-  };
-
-  const per = mk('一币 = 几珠', 'beads_per_coin', '20');
-
-  const btn = el('button', 'btn btn--sm btn--primary', '保存参数');
-  btn.type = 'button';
-  btn.addEventListener('click', async () => {
-    const q = parseFloat(per.value);
-    if (!isFinite(q) || q <= 0) { toast('「一币 = 几珠」要填大于 0 的数字', 'bad'); return; }
-    btn.disabled = true;
-    try {
-      await api('/api/manage/shop/values', {
-        shop_id: MSHOP.id, beads_per_coin: q,
-      });
-      MSHOP.beads_per_coin = q;
-      toast('参数已保存');
-    } catch (e) {
-      toast(String(e.message || e), 'bad');
-    } finally {
-      btn.disabled = false;
-    }
-  });
-  row.appendChild(btn);
-
-  return row;
 }
 
 function renderMachineView(card, g) {

@@ -101,7 +101,10 @@ const UI = (() => {
     function fmtLabel(v) {
       if (!v) return '选择日期';
       const d = new Date(v + 'T00:00:00');
-      return v + ' 周' + WEEK[(d.getDay() + 6) % 7];
+      const wd = ' 周' + WEEK[(d.getDay() + 6) % 7];
+      // 手机上顶栏窄，年份省掉
+      const narrow = window.matchMedia('(max-width: 47.99em)').matches;
+      return (narrow ? v.slice(5) : v) + wd;
     }
 
     function close() {

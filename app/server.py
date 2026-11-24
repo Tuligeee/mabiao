@@ -804,9 +804,10 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             #   记币 → 投币出珠 = 投币数 × 一币几珠，和宝点上币直接比
             #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
             row_shop0 = shop_row(shop_id) or {}
-            per_coin = row_shop0.get("beads_per_coin")
             u_brand = brand_of(u)
             m_unit = brand_unit(u_brand)
+            # 一币几珠优先用品牌上配的，没配再退回门店级（老数据）
+            per_coin = brand_per_coin(u_brand) or row_shop0.get("beads_per_coin")
             if m_unit == "bead" and per_coin:
                 paid_beads = tin
                 tin_coins = (tin / per_coin) if tin is not None else None
@@ -1184,6 +1185,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_entry(q))
             if p == "/api/bd/status":
                 return self._send(200, api_bd_status(q))
+            if p == "/api/manage/devices":
+                return self._send(200, api_manage_devices(q))
             if p == "/api/brand/list":
                 return self._send(200, api_brand_list(q))
             if p == "/api/brand/flags":
@@ -1809,9 +1812,26 @@ def brand_unit(brand: str) -> str:
     return DEFAULT_UNIT
 
 
+def brand_per_coin(brand: str):
+    """这个品牌一币几珠；没配返回 None。"""
+    if not brand:
+        return None
+    with conn() as c:
+        r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
+    if r and r["flags"]:
+        try:
+            v = (json.loads(r["flags"]) or {}).get("per_coin")
+            if v:
+                return float(v)
+        except Exception:
+            pass
+    return None
+
+
 def brand_flags(brand: str) -> dict:
     m = brand_mode(brand)
-    return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand)}
+    return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand),
+            "per_coin": brand_per_coin(brand)}
 
 
 def api_bd_status(q) -> dict:
@@ -1846,6 +1866,44 @@ def api_bd_poll(b: dict) -> dict:
         reset_baodian()
         out.update(bd_alive())
     return out
+
+
+def api_manage_devices(q) -> dict:
+    """拉这家店最近几天的宝点设备，标出哪些已经加过了。"""
+    sid = guard_shop((q.get("shop_id") or [""])[0] or (resolve_shop(actor()) or ""))
+    days = int((q.get("days") or ["3"])[0])
+    shop = shop_of(shop_row(sid))
+    bd = baodian(sid)
+    seen: dict = {}
+    for i in range(1, days + 1):
+        day = (date.today() - timedelta(days=i)).isoformat()
+        try:
+            devs = bd.fetch_up(shop, day)
+        except Exception:
+            continue
+        for d in devs:
+            cid = str(d.get("commId") or "")
+            if not cid or cid in seen:
+                continue
+            seen[cid] = {
+                "comm": cid,
+                "name": d.get("deviceName") or "未命名",
+                "team": d.get("projectTeamName") or "",
+                "kind": kind_of(d.get("projectTeamName")) or "",
+                "day": day,
+            }
+    with conn() as c:
+        have = {str(r["comm_id"]) for r in c.execute(
+            "SELECT m.comm_id FROM comms m JOIN units u ON u.id=m.unit_id "
+            "WHERE u.shop_id=?", (sid,))}
+        brands = [r["brand"] for r in c.execute(
+            "SELECT DISTINCT brand FROM units WHERE shop_id=? AND brand IS NOT NULL "
+            "AND brand<>'' ORDER BY brand", (sid,))]
+    rows = list(seen.values())
+    for v in rows:
+        v["added"] = v["comm"] in have
+    rows.sort(key=lambda x: (x["kind"], x["name"], x["comm"]))
+    return {"rows": rows, "brands": brands}
 
 
 def api_brand_list(q) -> dict:
@@ -1886,10 +1944,15 @@ def save_brand_flags(b: dict) -> dict:
     unit = b.get("unit") or DEFAULT_UNIT
     if unit not in dict(METER_UNITS):
         raise RuntimeError("码表单位只能是币或珠")
+    per = b.get("per_coin")
+    try:
+        per = float(per) if per not in (None, "", 0, "0") else None
+    except Exception:
+        per = None
     with conn() as c:
         c.execute("INSERT INTO brand_flags(brand, flags) VALUES(?,?) "
                   "ON CONFLICT(brand) DO UPDATE SET flags=excluded.flags",
-                  (brand, json.dumps({"mode": mode, "unit": unit})))
+                  (brand, json.dumps({"mode": mode, "unit": unit, "per_coin": per})))
     return {"ok": True, "brand": brand, "flags": brand_flags(brand)}
 
 
