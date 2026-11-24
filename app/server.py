@@ -164,10 +164,16 @@ def ensure_codes():
             base = re.sub(r"\s+\d{5,}$", "", r["name"]).strip() or r["name"]
             groups.setdefault((r["shop_id"], base), []).append(r)
         for _key, items in groups.items():
-            items.sort(key=lambda x: (x["first_comm"] or "999999", x["id"]))
-            for i, it in enumerate(items, 1):
-                if it.get("pos") != i:
-                    c.execute("UPDATE units SET pos=? WHERE id=?", (i, it["id"]))
+            used = {it["pos"] for it in items if it.get("pos")}
+            nxt = 1
+            # 已分配过的 P 位不再重排：贴纸印了 P1..Pn，换卡头不该让它变
+            for it in sorted(items, key=lambda x: (x["first_comm"] or "999999", x["id"])):
+                if it.get("pos"):
+                    continue
+                while nxt in used:
+                    nxt += 1
+                c.execute("UPDATE units SET pos=? WHERE id=?", (nxt, it["id"]))
+                used.add(nxt)
 
 
 def machine_of(uid: int) -> str:
