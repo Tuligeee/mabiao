@@ -1115,33 +1115,24 @@ async function renderUnits() {
     return;
   }
 
-  const groups = [
-    { kind: 'pusher', name: '推币机' },
-    { kind: 'pachinko', name: '弹珠机' },
-  ];
-
-  for (const grp of groups) {
-    const rows = d.rows.filter((g) => (g.kind || 'pusher') === grp.kind);
-    if (!rows.length) return;
-
+  const mkHead = (title, count, kind, brand) => {
     const head = el('h2', 'machine-group');
-    head.appendChild(el('span', null, grp.name));
-    head.appendChild(el('span', 'machine-group__n', rows.length + ' 台'));
+    head.appendChild(el('span', null, title));
+    head.appendChild(el('span', 'machine-group__n', count + ' 台'));
     const addBtn = el('button', 'btn btn--sm btn--quiet machine-group__add', '+ 新增');
     addBtn.type = 'button';
-    addBtn.setAttribute('aria-label', '新增一台' + grp.name);
+    addBtn.setAttribute('aria-label', '新增一台' + title);
     addBtn.addEventListener('click', () => {
-      ADD_KIND = ADD_KIND === grp.kind ? null : grp.kind;
+      const same = ADD_KIND === kind && ADD_BRAND === brand;
+      ADD_KIND = same ? null : kind;
+      ADD_BRAND = same ? null : (brand || null);
       renderUnits();
     });
     head.appendChild(addBtn);
-    wrap.appendChild(head);
+    return head;
+  };
 
-    if (ADD_KIND === grp.kind) wrap.appendChild(addMachineForm(grp.kind));
-    if (grp.kind === 'pachinko') {
-      wrap.appendChild(await brandCfg());
-    }
-
+  const mkGrid = (rows) => {
     const grid = el('div', 'machines');
     rows.forEach((g) => {
       const card = el('article', 'machine');
@@ -1149,7 +1140,52 @@ async function renderUnits() {
       else renderMachineView(card, g);
       grid.appendChild(card);
     });
-    wrap.appendChild(grid);
+    return grid;
+  };
+
+  // ---------- 推币机 ----------
+  const pushers = d.rows.filter((g) => (g.kind || 'pusher') === 'pusher');
+  if (pushers.length) {
+    wrap.appendChild(mkHead('推币机', pushers.length, 'pusher', null));
+    if (ADD_KIND === 'pusher') wrap.appendChild(addMachineForm('pusher', null));
+    wrap.appendChild(mkGrid(pushers));
+  }
+
+  // ---------- 弹珠机：先品牌管理，再按品牌分块 ----------
+  const pachs = d.rows.filter((g) => g.kind === 'pachinko');
+  if (pachs.length) {
+    wrap.appendChild(mkHead('弹珠机', pachs.length, 'pachinko', null));
+    // 隐藏整块的「+ 新增」，新增入口挪到每个品牌上
+    const topAdd = wrap.querySelector('.machine-group:last-of-type .machine-group__add');
+    if (topAdd) topAdd.hidden = true;
+
+    wrap.appendChild(await brandCfg());
+
+    const byBrand = {};
+    pachs.forEach((g) => {
+      const b = g.brand || '未分品牌';
+      (byBrand[b] = byBrand[b] || []).push(g);
+    });
+    const names = Object.keys(byBrand).sort((a, b) => byBrand[b].length - byBrand[a].length);
+    names.forEach((b) => {
+      const bh = el('h3', 'brand-group');
+      bh.appendChild(el('span', 'brand-group__name', b));
+      bh.appendChild(el('span', 'brand-group__n', byBrand[b].length + ' 台'));
+      const ab = el('button', 'btn btn--sm btn--quiet brand-group__add', '+ 新增到' + b);
+      ab.type = 'button';
+      ab.addEventListener('click', () => {
+        const same = ADD_KIND === 'pachinko' && ADD_BRAND === b;
+        ADD_KIND = same ? null : 'pachinko';
+        ADD_BRAND = same ? null : b;
+        renderUnits();
+      });
+      bh.appendChild(ab);
+      wrap.appendChild(bh);
+      if (ADD_KIND === 'pachinko' && ADD_BRAND === b) {
+        wrap.appendChild(addMachineForm('pachinko', b));
+      }
+      wrap.appendChild(mkGrid(byBrand[b]));
+    });
   }
 
   if (EDIT_KEY) {
@@ -1159,8 +1195,9 @@ async function renderUnits() {
 }
 
 let ADD_KIND = null;
+let ADD_BRAND = null;
 
-function addMachineForm(kind) {
+function addMachineForm(kind, brand) {
   const box = el('div', 'add-panel');
 
   // ---------- 上半：从宝点拉清单勾选 ----------
@@ -1263,6 +1300,7 @@ function addMachineForm(kind) {
               name: cb.dataset.name + ' ' + cb.value,
               comms: cb.value,
               kind,
+              brand: brand || undefined,
               shared: false,
             });
             ok += 1;
@@ -1310,7 +1348,7 @@ function addMachineForm(kind) {
   save.type = 'button';
   const cancel = el('button', 'btn btn--sm btn--quiet', '取消');
   cancel.type = 'button';
-  cancel.addEventListener('click', () => { ADD_KIND = null; renderUnits(); });
+  cancel.addEventListener('click', () => { ADD_KIND = null; ADD_BRAND = null; renderUnits(); });
   acts.appendChild(save);
   acts.appendChild(cancel);
   form.appendChild(acts);
@@ -1327,6 +1365,7 @@ function addMachineForm(kind) {
       await api('/api/manage/unit/save', {
         shop_id: MSHOP.id, name: nm, comms: cm, kind,
         shared: cm.split(',').filter(Boolean).length > 1,
+        brand: brand || undefined,
       });
       toast('已新增');
       ADD_KIND = null;

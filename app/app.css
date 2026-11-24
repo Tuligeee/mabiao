@@ -1297,3 +1297,18 @@ body[data-scanning="1"] { overflow: hidden; }
 .add-panel__manual { margin-block-start: var(--space-4); border-block-start: 1px solid var(--line); padding-block-start: var(--space-3); }
 .add-panel__manual summary { cursor: pointer; font-size: var(--text-sm); color: var(--ink-2); }
 .add-panel__manual .add-form { margin-block-start: var(--space-3); }
+
+/* 弹珠机按品牌分组 */
+.brand-group {
+  display: flex; align-items: baseline; gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-3);
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--line);
+}
+.brand-group__name { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.brand-group__n { font-size: var(--text-xs); color: var(--ink-3); }
+.brand-group__add { margin-inline-start: auto; }
+@media (max-width: 47.99em) {
+  .brand-group { margin-block-start: var(--space-5); }
+  .brand-group__add { font-size: 12px; }
+}
