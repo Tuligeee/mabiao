@@ -107,6 +107,10 @@ def ensure_codes():
         if "code" not in scols:
             c.execute("ALTER TABLE shops ADD COLUMN code TEXT")
         ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
+        if "from_day" not in ucols:
+            c.execute("ALTER TABLE units ADD COLUMN from_day TEXT")
+        if "to_day" not in ucols:
+            c.execute("ALTER TABLE units ADD COLUMN to_day TEXT")
         if "code" not in ucols:
             c.execute("ALTER TABLE units ADD COLUMN code TEXT")
         if "pos" not in ucols:
@@ -530,6 +534,9 @@ def init_db():
                   "shop_id TEXT, day TEXT, unit_id INTEGER, reason TEXT, note TEXT, "
                   "updated_at TEXT, updated_by TEXT, PRIMARY KEY(shop_id,day,unit_id))")
         ensure_codes()
+        # 老机台补登记日（列在 ensure_codes 里才建出来，必须放它后面）
+        c.execute("UPDATE units SET from_day = COALESCE((SELECT MIN(r.day) FROM readings r "
+                  "WHERE r.unit_id = units.id), ?) WHERE from_day IS NULL", (EPOCH_DAY,))
         ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
         if "locked" not in ucols:
             c.execute("ALTER TABLE units ADD COLUMN locked INTEGER DEFAULT 0")
@@ -714,9 +721,15 @@ def put_comm(c, d, unit_id):
         comm_owner_set(c, cid, unit_id, u["shop_id"], date.today().isoformat())
 
 
-def units_of(shop_id: str, active_only: bool = True, kind: str | None = None) -> list:
-    where = "AND active=1" if active_only else ""
-    args = [shop_id]
+def units_of(shop_id: str, active_only: bool = True, kind: str | None = None,
+             day: str | None = None) -> list:
+    if day:
+        # 按「这一天在不在用」取：卖掉的老机台仍能出现在历史那天
+        where = ("AND (from_day IS NULL OR from_day<=?) "
+                 "AND (to_day IS NULL OR to_day>?)")
+    else:
+        where = "AND active=1" if active_only else ""
+    args = [shop_id] if not day else [shop_id, day, day]
     if kind:
         where += " AND COALESCE(kind,'pusher')=?"
         args.append(kind)
@@ -863,7 +876,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
                 "big": len([r for r in rows if r["diff"] is not None and abs(r["diff"]) >= 1000]),
             },
         }
-    units = units_of(shop_id, kind=kind)
+    units = units_of(shop_id, kind=kind, day=day)
     with conn() as c:
         cards = {}
         for r in c.execute("SELECT * FROM card_daily WHERE shop_id=? AND day=?", (shop_id, day)):
@@ -1393,6 +1406,8 @@ class Handler(BaseHTTPRequestHandler):
                 r = merge_units(b["shop_id"], b.get("ids") or [], b.get("name") or "")
                 ensure_codes()
                 return self._send(200, r)
+            if p == "/api/manage/unit/retire":
+                return self._send(200, retire_unit(int(b["id"]), b.get("day")))
             if p == "/api/manage/unit/remove":
                 r = remove_unit(int(b["id"]))
                 ensure_codes()
@@ -2241,12 +2256,12 @@ def save_unit(b: dict) -> dict:
                       (name, (b.get("brand") or "").strip() or None, shared, kind, uid))
             uid = int(uid)
         else:
-            c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,brand) "
-                      "VALUES(?,?,?,?,1,1,?,?) "
+            c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,brand,from_day) "
+                      "VALUES(?,?,?,?,1,1,?,?,?) "
                       "ON CONFLICT(shop_id,name) DO UPDATE SET shared=excluded.shared, "
                       "active=1, locked=1, kind=excluded.kind, brand=excluded.brand",
                       (shop_id, name, b.get("team"), shared, kind,
-                       (b.get("brand") or "").strip() or None))
+                       (b.get("brand") or "").strip() or None, date.today().isoformat()))
             uid = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
                             (shop_id, name)).fetchone()["id"]
         # 先解绑不在新清单里的通讯ID
@@ -2407,6 +2422,19 @@ def split_unit(uid: int) -> dict:
                             (u["shop_id"], label)).fetchone()["id"]
             c.execute("UPDATE comms SET unit_id=? WHERE comm_id=?", (nid, cid))
     return {"ok": True, "units": len(comms)}
+
+
+def retire_unit(uid: int, day: str | None = None) -> dict:
+    """机台卖掉/撤掉：停用并记下停用日，历史那天仍能查到。"""
+    with conn() as c:
+        row = c.execute("SELECT shop_id FROM units WHERE id=?", (uid,)).fetchone()
+        if row:
+            guard_shop(row["shop_id"])
+        d = day or date.today().isoformat()
+        c.execute("UPDATE units SET active=0, to_day=? WHERE id=?", (d, uid))
+        c.execute("UPDATE comm_owner SET to_day=? WHERE unit_id=? AND (to_day IS NULL OR to_day>?)",
+                  (d, uid, d))
+    return {"ok": True, "to_day": d}
 
 
 def remove_unit(uid: int) -> dict:

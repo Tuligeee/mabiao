@@ -1726,20 +1726,19 @@ function renderMachineView(card, g) {
     foot.appendChild(sp);
   }
 
-  const del = el('button', 'btn btn--sm btn--quiet', '删除');
+  const del = el('button', 'btn btn--sm btn--quiet', '停用');
   del.type = 'button';
-  del.setAttribute('aria-label', '删除机台 ' + g.key);
+  del.setAttribute('aria-label', '停用机台 ' + g.key);
   del.addEventListener('click', async () => {
     const ok = await UI.confirm({
-      title: '删除机台',
-      body: '「' + g.key + '」和它的 ' + g.comms.length + ' 个卡头会一起移除。',
-      okText: '删除',
-      danger: true,
+      title: '停用机台',
+      body: '「' + g.key + '」不再出现在新的核对里；已经核对过的日期仍然保留。',
+      okText: '停用',
     });
     if (!ok) return;
     try {
-      for (const u of g.units) await api('/api/manage/unit/remove', { id: u.id });
-      toast('已删除');
+      for (const u of g.units) await api('/api/manage/unit/retire', { id: u.id });
+      toast('已停用');
       renderUnits();
     } catch (e) { toast(String(e.message || e), 'bad'); }
   });
