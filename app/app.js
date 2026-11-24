@@ -113,7 +113,6 @@ function welcomeDialog(b) {
   go.type = 'button';
   acts.appendChild(go);
   dlg.appendChild(acts);
-  if (perWrap) dlg.insertBefore(perWrap, acts);
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   go.focus();
@@ -1343,6 +1342,7 @@ function addMachineForm(kind) {
 }
 
 let BRANDS = null;
+let BRANDS_SHOP = null;
 
 function fillBrandOptions() {
   let dl = $('brandOptions');
@@ -1366,11 +1366,12 @@ async function brandCfg() {
   head.appendChild(el('span', 'brand-cfg__t', '机台品牌'));
   box.appendChild(head);
 
-  if (!BRANDS) {
+  if (!BRANDS || BRANDS_SHOP !== MSHOP.id) {
     box.appendChild(el('p', 'brand-cfg__sub', '读取中'));
     try {
       const d = await api('/api/brand/list?shop_id=' + encodeURIComponent(MSHOP.id));
       BRANDS = d.rows;
+      BRANDS_SHOP = MSHOP.id;
       fillBrandOptions();
     } catch (e) {
       box.appendChild(el('p', 'brand-cfg__sub', String(e.message || e)));
@@ -1519,6 +1520,7 @@ function brandDialog(b) {
   acts.appendChild(cancel);
   acts.appendChild(save);
   dlg.appendChild(acts);
+  if (perWrap) dlg.insertBefore(perWrap, acts);
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   save.focus();

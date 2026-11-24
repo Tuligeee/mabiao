@@ -1929,7 +1929,7 @@ def save_brand_flags(b: dict) -> dict:
             "SELECT name, brand FROM units WHERE shop_id=? AND kind='pachinko' AND active=1",
             (own,))]
         if brand not in {brand_of(x) for x in rows}:
-            raise AuthError("这家店没有这个品牌")
+            raise AuthError("这家店没有「%s」这个品牌，只能改本店有的品牌" % brand)
     label = (b.get("label") or "").strip()
     if label and label != brand:
         with conn() as c:
