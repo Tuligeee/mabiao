@@ -1366,13 +1366,67 @@ function addMachineForm(kind) {
   f1.appendChild(name);
   form.appendChild(f1);
 
-  const f2 = el('label', 'field');
-  f2.appendChild(el('span', 'field__label', '通讯ID'));
-  const comms = el('input', 'input');
-  comms.type = 'text';
-  comms.autocomplete = 'off';
-  comms.placeholder = '733720,733895';
-  f2.appendChild(comms);
+  // 卡头：P1 / P2 / … 一行一个
+  const f2 = el('div', 'field');
+  f2.appendChild(el('span', 'field__label', '卡头'));
+  const ul = el('ul', 'mf__chips');
+  ul.setAttribute('aria-label', '卡头通讯ID');
+  f2.appendChild(ul);
+
+  const XSvg = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+  function renumber() {
+    [...ul.querySelectorAll('.chip--edit')].forEach((li, i) => {
+      const b = li.querySelector('.chip__p');
+      if (b) b.textContent = 'P' + (i + 1);
+    });
+  }
+
+  function addChip(val) {
+    const li = el('li', 'chip chip--edit');
+    li.appendChild(el('b', 'chip__p', 'P1'));
+    const inp = el('input', 'chip__in');
+    inp.type = 'text';
+    inp.inputMode = 'numeric';
+    inp.autocomplete = 'off';
+    inp.value = val || '';
+    inp.placeholder = '通讯ID';
+    inp.size = Math.max(6, (val || '').length);
+    inp.setAttribute('aria-label', '卡头通讯ID');
+    inp.addEventListener('input', () => { inp.size = Math.max(6, inp.value.length); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); save.click(); }
+    });
+    li.appendChild(inp);
+    const x = el('button', 'chip__x');
+    x.type = 'button';
+    x.setAttribute('aria-label', '删掉这个卡头');
+    x.innerHTML = XSvg;
+    x.addEventListener('click', () => {
+      li.remove();
+      renumber();
+      const first = ul.querySelector('.chip__in');
+      if (first) first.focus();
+    });
+    li.appendChild(x);
+    ul.appendChild(li);
+    renumber();
+    return inp;
+  }
+
+  addChip('');
+
+  const addLi = el('li', 'chip chip--add');
+  const addBtn = el('button', 'chip__add');
+  addBtn.type = 'button';
+  addBtn.setAttribute('aria-label', '加一个卡头');
+  addBtn.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  addBtn.addEventListener('click', () => {
+    const inp = addChip('');
+    inp.focus();
+  });
+  addLi.appendChild(addBtn);
+  ul.appendChild(addLi);
   form.appendChild(f2);
 
   const mActs = el('div', 'add-form__acts');
@@ -1385,17 +1439,18 @@ function addMachineForm(kind) {
 
   save.addEventListener('click', async () => {
     const nm = name.value.trim();
-    const cm = comms.value.trim();
+    const parts = [...ul.querySelectorAll('.chip__in')].map((i) => i.value.trim()).filter(Boolean);
     if (!nm) { toast('填机台名', 'bad'); name.focus(); return; }
-    if (!cm) { toast('填通讯ID', 'bad'); comms.focus(); return; }
+    if (!parts.length) { toast('填至少一个卡头', 'bad'); ul.querySelector('.chip__in').focus(); return; }
+    if (new Set(parts).size !== parts.length) { toast('卡头有重复', 'bad'); return; }
     const br = getBrand();
     if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
     save.disabled = true;
     try {
       await api('/api/manage/unit/save', {
-        shop_id: MSHOP.id, name: nm, comms: cm, kind,
+        shop_id: MSHOP.id, name: nm, comms: parts.join(','), kind,
         brand: kind === 'pachinko' ? br : undefined,
-        shared: cm.split(',').filter(Boolean).length > 1,
+        shared: parts.length > 1,
       });
       toast('已新增');
       ADD_KIND = null;

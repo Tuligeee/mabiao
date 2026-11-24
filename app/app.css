@@ -1316,3 +1316,9 @@ body[data-scanning="1"] { overflow: hidden; }
 .add-panel__manual { margin-block-start: var(--space-4); border-block-start: 1px solid var(--line); padding-block-start: var(--space-3); }
 .add-panel__manual summary { cursor: pointer; font-size: var(--text-sm); color: var(--ink-2); }
 .add-panel__manual .add-form { margin-block-start: var(--space-3); }
+
+/* 手工录入里的卡头行 */
+.add-form .field > .field__label { display: block; margin-block-end: var(--space-2); }
+.add-form .mf__chips { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.add-form .chip--edit { display: inline-flex; align-items: center; gap: var(--space-1); }
+.add-form .chip__in { inline-size: auto; }
