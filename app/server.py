@@ -480,7 +480,11 @@ CREATE TABLE IF NOT EXISTS units(
 CREATE TABLE IF NOT EXISTS comms(
   comm_id TEXT PRIMARY KEY, unit_id INTEGER NOT NULL, console_no TEXT, team TEXT,
   device TEXT, updated_at TEXT);
--- 卡头归属历史：一个卡头哪天起归哪台机，换机台时旧行封口、新行开张
+-- 核对结果冻结：总部锁定后这一天不再随数据变化
+CREATE TABLE IF NOT EXISTS recon_frozen(
+  shop_id TEXT, day TEXT, unit_id INTEGER, payload TEXT, frozen_at TEXT, frozen_by TEXT,
+  PRIMARY KEY(shop_id, day, unit_id));
+-- 卡头归属历史：一个卡头哪天起归哪台机，换机台时旧封口、新行开张
 CREATE TABLE IF NOT EXISTS comm_owner(
   comm_id TEXT, unit_id INTEGER, shop_id TEXT,
   from_day TEXT, to_day TEXT, PRIMARY KEY(comm_id, from_day));
@@ -810,7 +814,55 @@ def prev_reading(shop_id: str, unit_id: int, day: str):
     return dict(r) if r else None
 
 
+def frozen_info(shop_id: str, day: str):
+    with conn() as c:
+        r = c.execute("SELECT frozen_at, frozen_by, COUNT(*) n FROM recon_frozen "
+                      "WHERE shop_id=? AND day=?", (shop_id, day)).fetchone()
+    if not r or not r["n"]:
+        return None
+    return {"at": r["frozen_at"], "by": r["frozen_by"], "n": r["n"]}
+
+
+def recon_freeze(shop_id: str, day: str) -> dict:
+    """把这一天算一遍存下来；以后都读这份。"""
+    d = recon(shop_id, day, None)
+    who = (actor() or {}).get("name") or "?"
+    with conn() as c:
+        c.execute("DELETE FROM recon_frozen WHERE shop_id=? AND day=?", (shop_id, day))
+        for r in d["rows"]:
+            c.execute("INSERT INTO recon_frozen(shop_id,day,unit_id,payload,frozen_at,frozen_by) "
+                      "VALUES(?,?,?,?,?,?)",
+                      (shop_id, day, r["unit_id"], json.dumps(r, ensure_ascii=False), now(), who))
+    return {"ok": True, "rows": len(d["rows"]), "summary": d["summary"]}
+
+
+def recon_unfreeze(shop_id: str, day: str) -> dict:
+    with conn() as c:
+        c.execute("DELETE FROM recon_frozen WHERE shop_id=? AND day=?", (shop_id, day))
+    return {"ok": True}
+
+
 def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
+    frz = frozen_info(shop_id, day)
+    if frz:
+        with conn() as c:
+            rows = [json.loads(r["payload"]) for r in c.execute(
+                "SELECT payload FROM recon_frozen WHERE shop_id=? AND day=? ORDER BY unit_id",
+                (shop_id, day))]
+        if kind:
+            rows = [r for r in rows if (r.get("kind") or "pusher") == kind]
+        ok = [r for r in rows if r["status"] == "正常"]
+        return {
+            "day": day, "rows": rows, "frozen": frz,
+            "summary": {
+                "total": len(rows), "ok": len(ok),
+                "diff_all": round(sum(r["diff"] for r in rows if r["diff"] is not None), 1),
+                "diff_ok": round(sum(r["diff"] for r in ok if r["diff"] is not None), 1),
+                "warn": len([r for r in rows if r["status"] in
+                             ("读数比昨天小", "第一次填", "今天还没填", "宝点今天没有数据")]),
+                "big": len([r for r in rows if r["diff"] is not None and abs(r["diff"]) >= 1000]),
+            },
+        }
     units = units_of(shop_id, kind=kind)
     with conn() as c:
         cards = {}
@@ -919,6 +971,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
     return {
         "day": day,
         "rows": rows,
+        "frozen": None,
         "summary": {
             "total": len(rows),
             "ok": len(ok),
@@ -1285,6 +1338,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bd_poll(b))
             if p == "/api/manage/brand/flags":
                 return self._send(200, save_brand_flags(b))
+            if p == "/api/recon/freeze":
+                return self._send(200, api_recon_freeze(b))
             if p == "/api/recon/note":
                 return self._send(200, api_recon_note(b))
             if p == "/api/entry":
@@ -2388,6 +2443,17 @@ def api_entry(q):
     out["can_edit"] = can_edit(day)
     out["edit_day"] = edit_day()
     return out
+
+
+def api_recon_freeze(b) -> dict:
+    require_hq()
+    sid = guard_shop(b["shop_id"])
+    day = (b.get("day") or "").strip()
+    if not day:
+        raise RuntimeError("缺日期")
+    if b.get("unfreeze"):
+        return recon_unfreeze(sid, day)
+    return recon_freeze(sid, day)
 
 
 def api_recon_note(b) -> dict:

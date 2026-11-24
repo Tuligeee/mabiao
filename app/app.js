@@ -681,6 +681,20 @@ function renderRecon() {
   $('fDiff').dataset.tone = Math.abs(s.diff_ok) >= 1000 ? 'bad' : '';
   $('fMeta').textContent = `${s.ok} 台可核对 · 含异常合计 ${fmt1(s.diff_all)} · 误差超千 ${s.big} 台`;
 
+  // 锁定状态：总部可锁/解锁，锁定后所有人看到的是定死的数
+  const fz = d.frozen;
+  const fb = $('btnFreeze');
+  fb.hidden = S.role !== 'hq';
+  if (fz) {
+    $('reconLede').textContent = d.day + ' · 已锁定'
+      + (fz.at ? '（' + fz.at.slice(0, 16) + ' ' + (fz.by || '') + '）' : '');
+    fb.textContent = '解锁重算';
+    fb.dataset.act = 'unfreeze';
+  } else {
+    fb.textContent = '锁定这一天';
+    fb.dataset.act = 'freeze';
+  }
+
   const pach = S.kind === 'pachinko';
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
     b.setAttribute('aria-selected', b.dataset.kind === S.kind ? 'true' : 'false');
@@ -2257,6 +2271,29 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnSave').addEventListener('click', saveAndFetch);
   $('btnToRecon').addEventListener('click', () => setView('recon'));
+  $('btnFreeze').addEventListener('click', async () => {
+    const unfreeze = $('btnFreeze').dataset.act === 'unfreeze';
+    if (!unfreeze) {
+      const ok = await UI.confirm({
+        title: '锁定 ' + S.day,
+        body: '锁定后这一天的数字就定死了，之后宝点补数、改读数都不再影响它。只有总部能解锁。',
+        okText: '锁定',
+      });
+      if (!ok) return;
+    }
+    $('btnFreeze').disabled = true;
+    try {
+      await api('/api/recon/freeze',
+        { shop_id: S.shopId, day: S.day, unfreeze });
+      toast(unfreeze ? '已解锁' : '已锁定');
+      await loadRecon();
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+    } finally {
+      $('btnFreeze').disabled = false;
+    }
+  });
+
   $('btnExport').addEventListener('click', exportDialog);
   $('conn').addEventListener('click', bdLoginClick);
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
