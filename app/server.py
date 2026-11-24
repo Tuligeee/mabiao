@@ -488,6 +488,9 @@ CREATE TABLE IF NOT EXISTS comms(
 CREATE TABLE IF NOT EXISTS recon_frozen(
   shop_id TEXT, day TEXT, unit_id INTEGER, payload TEXT, frozen_at TEXT, frozen_by TEXT,
   PRIMARY KEY(shop_id, day, unit_id));
+-- 码表归零：这天起读数从 0 算，不再减前一天
+CREATE TABLE IF NOT EXISTS unit_resets(
+  unit_id INTEGER, day TEXT, by TEXT, at TEXT, PRIMARY KEY(unit_id, day));
 -- 卡头归属历史：一个卡头哪天起归哪台机，换机台时旧封口、新行开张
 CREATE TABLE IF NOT EXISTS comm_owner(
   comm_id TEXT, unit_id INTEGER, shop_id TEXT,
@@ -827,6 +830,16 @@ def prev_reading(shop_id: str, unit_id: int, day: str):
     return dict(r) if r else None
 
 
+def unit_reset_set(unit_id: int, day: str, on: bool = True) -> dict:
+    with conn() as c:
+        if on:
+            c.execute("INSERT OR REPLACE INTO unit_resets(unit_id, day, by, at) VALUES(?,?,?,?)",
+                      (unit_id, day, (actor() or {}).get("name") or "?", now()))
+        else:
+            c.execute("DELETE FROM unit_resets WHERE unit_id=? AND day=?", (unit_id, day))
+    return {"ok": True}
+
+
 def frozen_info(shop_id: str, day: str):
     with conn() as c:
         r = c.execute("SELECT frozen_at, frozen_by, COUNT(*) n FROM recon_frozen "
@@ -887,6 +900,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         notes = {}
         for r in c.execute("SELECT * FROM recon_notes WHERE shop_id=? AND day=?", (shop_id, day)):
             notes[r["unit_id"]] = dict(r)
+        resets = {r["unit_id"] for r in c.execute(
+            "SELECT unit_id FROM unit_resets WHERE day=?", (day,))}
 
     rows = []
     for u in units:
@@ -898,17 +913,26 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         down = sum((g["down_qty"] or 0) for g in got) / RATE if got else None
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day) if rd else None
+        # 这天码表归零了：增量直接取当天读数
+        reset = (u["id"] in resets)
 
         is_p = (u.get("kind") == "pachinko")
         tin = tout = None
-        if rd and pv:
+        if rd and reset:
+            tin = rd["in_r"] or 0
+            tout = rd["out_r"] or 0
+        elif rd and pv:
             tin = (rd["in_r"] or 0) - (pv["in_r"] or 0)
             tout = (rd["out_r"] or 0) - (pv["out_r"] or 0)
 
         p_metrics = None
         if is_p:
             d_tokens = d_out = d_cards = None
-            if rd and pv:
+            if rd and reset:
+                d_tokens = rd["p_tokens"] or 0
+                d_out = rd["p_out"] or 0
+                d_cards = rd["p_cards"] or 0
+            elif rd and pv:
                 d_tokens = (rd["p_tokens"] or 0) - (pv["p_tokens"] or 0)
                 d_out = (rd["p_out"] or 0) - (pv["p_out"] or 0)
                 d_cards = (rd["p_cards"] or 0) - (pv["p_cards"] or 0)
@@ -957,7 +981,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         elif pv is None:
             status = "第一次填"
         elif (rd["in_r"] or 0) < (pv["in_r"] or 0) or (rd["out_r"] or 0) < (pv["out_r"] or 0):
-            status = "读数比昨天小"
+            status = "正常" if reset else "读数比昨天小"
         else:
             status = "正常"
 
@@ -976,6 +1000,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "in_r": rd["in_r"] if rd else None, "out_r": rd["out_r"] if rd else None,
             "prev_in": pv["in_r"] if pv else None, "prev_out": pv["out_r"] if pv else None,
             "note": rd["note"] if rd else None,
+            "reset": bool(reset),
             "reason": (notes.get(u["id"]) or {}).get("reason"),
             "reason_note": (notes.get(u["id"]) or {}).get("note"),
         })
@@ -1351,6 +1376,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bd_poll(b))
             if p == "/api/manage/brand/flags":
                 return self._send(200, save_brand_flags(b))
+            if p == "/api/recon/reset":
+                return self._send(200, api_recon_reset(b))
             if p == "/api/recon/freeze":
                 return self._send(200, api_recon_freeze(b))
             if p == "/api/recon/note":
@@ -2475,6 +2502,18 @@ def api_entry(q):
     out["can_edit"] = can_edit(day)
     out["edit_day"] = edit_day()
     return out
+
+
+def api_recon_reset(b) -> dict:
+    sid = guard_shop(b["shop_id"])
+    day = (b.get("day") or "").strip()
+    uid = int(b["unit_id"])
+    if not day:
+        raise RuntimeError("缺日期")
+    # 只有总部能动
+    if (actor() or {}).get("type") != "hq":
+        raise AuthError("只有总部能标记码表归零")
+    return unit_reset_set(uid, day, bool(b.get("on", True)))
 
 
 def api_recon_freeze(b) -> dict:

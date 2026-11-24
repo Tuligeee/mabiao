@@ -772,6 +772,24 @@ function renderRecon() {
 
     const st = el('td');
     st.appendChild(statusTag(r.status));
+    if (S.role === 'hq' && (r.reset || r.status === '读数比昨天小')) {
+      const rb = el('button', 'reset-btn', r.reset ? '已按归零' : '按归零算');
+      rb.type = 'button';
+      rb.dataset.on = r.reset ? 'true' : 'false';
+      rb.addEventListener('click', async () => {
+        rb.disabled = true;
+        try {
+          await api('/api/recon/reset',
+            { shop_id: S.shopId, day: S.day, unit_id: r.unit_id, on: !r.reset });
+          toast(r.reset ? '已取消归零' : '已按归零计算');
+          await loadRecon();
+        } catch (e) {
+          toast(String(e.message || e), 'bad');
+          rb.disabled = false;
+        }
+      });
+      st.appendChild(rb);
+    }
     tr.appendChild(st);
     tr.appendChild(reasonCell(r));
     // 手机上每行变卡片，用 data-label 显示列名

@@ -1322,3 +1322,14 @@ body[data-scanning="1"] { overflow: hidden; }
 .add-form .mf__chips { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .add-form .chip--edit { display: inline-flex; align-items: center; gap: var(--space-1); }
 .add-form .chip__in { inline-size: auto; }
+
+/* 码表归零按钮 */
+.reset-btn {
+  margin-inline-start: var(--space-2);
+  padding: 2px 8px; border-radius: var(--radius-full);
+  font: inherit; font-size: 11px;
+  color: var(--ink-2); background: transparent;
+  border: 1px dashed var(--line-3); cursor: pointer;
+}
+.reset-btn:hover { background: var(--hover); }
+.reset-btn[data-on="true"] { border-style: solid; color: var(--ok); border-color: var(--ok); }
