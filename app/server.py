@@ -684,23 +684,34 @@ def sync_units_best(shop_id: str) -> dict:
 EPOCH_DAY = "1970-01-01"
 
 
+def _tomorrow(day: str | None = None) -> str:
+    d = date.fromisoformat(day) if day else date.today()
+    return (d + timedelta(days=1)).isoformat()
+
+
 def comm_owner_set(c, comm_id: str, unit_id: int, shop_id: str, day: str):
-    """把卡头归属改到 unit_id，生效日 day；旧归属封口到 day。"""
+    """把卡头归属改到 unit_id。
+
+    新装的卡头从 day 生效；从一个机台挪到另一个机台则从次日生效——
+    否则当天同一个卡头的流水会被两台机各算一遍，或者旧机当天那部分直接丢。
+    """
     row = c.execute("SELECT unit_id, shop_id, from_day, to_day FROM comm_owner "
                     "WHERE comm_id=? ORDER BY from_day DESC LIMIT 1", (comm_id,)).fetchone()
     if row and row["unit_id"] == unit_id and (row["to_day"] is None or row["to_day"] > day):
         return                                     # 没变，别重复记
+    moved = bool(row) and row["unit_id"] != unit_id
+    eff = _tomorrow(day) if moved else day
     if row:
         c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND from_day=? "
                   "AND (to_day IS NULL OR to_day>?)",
-                  (day, comm_id, row["from_day"], day))
+                  (eff, comm_id, row["from_day"], eff))
     # 回到原机台：把封口线接上，不新开一行
     back = c.execute("UPDATE comm_owner SET to_day=NULL WHERE comm_id=? AND unit_id=? "
-                     "AND to_day=?", (comm_id, unit_id, day))
+                     "AND to_day=?", (comm_id, unit_id, eff))
     if back.rowcount:
         return
     c.execute("INSERT OR REPLACE INTO comm_owner(comm_id, unit_id, shop_id, from_day, to_day) "
-              "VALUES(?,?,?,?,NULL)", (comm_id, unit_id, shop_id, day))
+              "VALUES(?,?,?,?,NULL)", (comm_id, unit_id, shop_id, eff))
 
 
 def comms_on(unit_id: int, day: str) -> list:
@@ -2297,8 +2308,9 @@ def save_unit(b: dict) -> dict:
         for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (uid,)):
             if r["comm_id"] not in keep:
                 c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
+                # 当天它还在上报，to_day 记明天，今天的数据照算
                 c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
-                          (today, r["comm_id"]))
+                          (_tomorrow(today), r["comm_id"]))
         for cid in comms:
             c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
                       "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
@@ -2458,9 +2470,11 @@ def retire_unit(uid: int, day: str | None = None) -> dict:
         if row:
             guard_shop(row["shop_id"])
         d = day or date.today().isoformat()
-        c.execute("UPDATE units SET active=0, to_day=? WHERE id=?", (d, uid))
+        # 停用当天它还在跑，从次日起才不再出现
+        stop = _tomorrow(d)
+        c.execute("UPDATE units SET active=0, to_day=? WHERE id=?", (stop, uid))
         c.execute("UPDATE comm_owner SET to_day=? WHERE unit_id=? AND (to_day IS NULL OR to_day>?)",
-                  (d, uid, d))
+                  (stop, uid, stop))
     return {"ok": True, "to_day": d}
 
 
