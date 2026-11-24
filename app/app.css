@@ -1312,3 +1312,9 @@ body[data-scanning="1"] { overflow: hidden; }
   .brand-group { margin-block-start: var(--space-5); }
   .brand-group__add { font-size: 12px; }
 }
+
+/* 新增面板里的品牌选择 */
+.add-panel__brand { flex-direction: row; align-items: center; gap: var(--space-3); margin-block-end: var(--space-3); }
+.add-panel__brand .field__label { flex: none; margin: 0; }
+.add-panel__sel { inline-size: auto; min-inline-size: 9rem; }
+.add-panel__newbrand { inline-size: 12rem; }

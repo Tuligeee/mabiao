@@ -1154,12 +1154,11 @@ async function renderUnits() {
   // ---------- 弹珠机：先品牌管理，再按品牌分块 ----------
   const pachs = d.rows.filter((g) => g.kind === 'pachinko');
   if (pachs.length) {
+    // 先加载品牌，新增面板里才有品牌可选
+    const cfgNode = await brandCfg();
     wrap.appendChild(mkHead('弹珠机', pachs.length, 'pachinko', null));
-    // 隐藏整块的「+ 新增」，新增入口挪到每个品牌上
-    const topAdd = wrap.querySelector('.machine-group:last-of-type .machine-group__add');
-    if (topAdd) topAdd.hidden = true;
-
-    wrap.appendChild(await brandCfg());
+    if (ADD_KIND === 'pachinko') wrap.appendChild(addMachineForm('pachinko'));
+    wrap.appendChild(cfgNode);
 
     const byBrand = {};
     pachs.forEach((g) => {
@@ -1171,19 +1170,7 @@ async function renderUnits() {
       const bh = el('h3', 'brand-group');
       bh.appendChild(el('span', 'brand-group__name', b));
       bh.appendChild(el('span', 'brand-group__n', byBrand[b].length + ' 台'));
-      const ab = el('button', 'btn btn--sm btn--quiet brand-group__add', '+ 新增到' + b);
-      ab.type = 'button';
-      ab.addEventListener('click', () => {
-        const same = ADD_KIND === 'pachinko' && ADD_BRAND === b;
-        ADD_KIND = same ? null : 'pachinko';
-        ADD_BRAND = same ? null : b;
-        renderUnits();
-      });
-      bh.appendChild(ab);
       wrap.appendChild(bh);
-      if (ADD_KIND === 'pachinko' && ADD_BRAND === b) {
-        wrap.appendChild(addMachineForm('pachinko', b));
-      }
       wrap.appendChild(mkGrid(byBrand[b]));
     });
   }
@@ -1197,10 +1184,43 @@ async function renderUnits() {
 let ADD_KIND = null;
 let ADD_BRAND = null;
 
-function addMachineForm(kind, brand) {
+function addMachineForm(kind) {
   const box = el('div', 'add-panel');
 
-  // ---------- 上半：从宝点拉清单勾选 ----------
+  // ---------- 品牌（只有弹珠机要选） ----------
+  let getBrand = () => undefined;
+  if (kind === 'pachinko') {
+    const exists = (BRANDS || []).map((b) => b.brand);
+    const wrap = el('label', 'field add-panel__brand');
+    wrap.appendChild(el('span', 'field__label', '品牌'));
+    const sel = el('select', 'input add-panel__sel');
+    exists.forEach((b) => {
+      const o = el('option', null, b);
+      o.value = b;
+      sel.appendChild(o);
+    });
+    const nw = el('option', null, '+ 新品牌');
+    nw.value = '__new__';
+    sel.appendChild(nw);
+    wrap.appendChild(sel);
+
+    const newIn = el('input', 'input add-panel__newbrand');
+    newIn.type = 'text';
+    newIn.autocomplete = 'off';
+    newIn.placeholder = '品牌名，比如 潮弹社';
+    newIn.setAttribute('aria-label', '新品牌名称');
+    newIn.hidden = true;
+    wrap.appendChild(newIn);
+
+    sel.addEventListener('change', () => {
+      newIn.hidden = sel.value !== '__new__';
+      if (!newIn.hidden) newIn.focus();
+    });
+    box.appendChild(wrap);
+    getBrand = () => (sel.value === '__new__' ? newIn.value.trim() : sel.value);
+  }
+
+  // ---------- 从宝点拉清单勾选 ----------
   const head = el('div', 'add-panel__head');
   head.appendChild(el('span', 'add-panel__title', '从宝点添加'));
   const pull = el('button', 'btn btn--sm', '拉取机台清单');
@@ -1241,7 +1261,7 @@ function addMachineForm(kind, brand) {
       cbAll.setAttribute('aria-label', '全选未添加的');
       thAll.appendChild(cbAll);
       hr.appendChild(thAll);
-      ['机台', '通讯ID', '类型', '状态'].forEach((t) => {
+      ['机台', '通讯ID', '状态'].forEach((t) => {
         const th = el('th', '', t);
         th.scope = 'col';
         hr.appendChild(th);
@@ -1267,7 +1287,6 @@ function addMachineForm(kind, brand) {
         tr.appendChild(td0);
         tr.appendChild(el('td', 'name', x.name));
         tr.appendChild(el('td', '', x.comm));
-        tr.appendChild(el('td', '', x.kind === 'pachinko' ? '弹珠机' : '推币机'));
         tr.appendChild(el('td', '', x.added ? '已在系统里' : '可添加'));
         body.appendChild(tr);
       });
@@ -1290,6 +1309,8 @@ function addMachineForm(kind, brand) {
       addSel.onclick = async () => {
         const picked = cbs.filter((c) => c.checked);
         if (!picked.length) return;
+        const br = getBrand();
+        if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
         addSel.disabled = true;
         addSel.textContent = '添加中…';
         let ok = 0;
@@ -1300,7 +1321,7 @@ function addMachineForm(kind, brand) {
               name: cb.dataset.name + ' ' + cb.value,
               comms: cb.value,
               kind,
-              brand: brand || undefined,
+              brand: kind === 'pachinko' ? br : undefined,
               shared: false,
             });
             ok += 1;
@@ -1320,7 +1341,7 @@ function addMachineForm(kind, brand) {
     }
   });
 
-  // ---------- 下半：手工添加（宝点里没有的） ----------
+  // ---------- 手工添加 ----------
   const manual = el('details', 'add-panel__manual');
   manual.appendChild(el('summary', '', '手工添加（宝点里没有的机台）'));
   const form = el('div', 'add-form');
@@ -1360,12 +1381,14 @@ function addMachineForm(kind, brand) {
     const cm = comms.value.trim();
     if (!nm) { toast('填机台名', 'bad'); name.focus(); return; }
     if (!cm) { toast('填通讯ID', 'bad'); comms.focus(); return; }
+    const br = getBrand();
+    if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
     save.disabled = true;
     try {
       await api('/api/manage/unit/save', {
         shop_id: MSHOP.id, name: nm, comms: cm, kind,
+        brand: kind === 'pachinko' ? br : undefined,
         shared: cm.split(',').filter(Boolean).length > 1,
-        brand: brand || undefined,
       });
       toast('已新增');
       ADD_KIND = null;
