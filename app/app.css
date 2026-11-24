@@ -1278,43 +1278,41 @@ body[data-scanning="1"] { overflow: hidden; }
 /* 新增机台面板 */
 .add-panel {
   margin-block: var(--space-4);
-  padding: var(--space-4);
+  padding: var(--space-5);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
 }
-.add-panel__head {
+.add-panel__k { font-size: var(--text-sm); color: var(--ink-2); font-weight: var(--weight-medium); }
+.add-panel__brand { display: flex; align-items: center; gap: var(--space-3); }
+.add-panel__sel { inline-size: auto; min-inline-size: 10rem; }
+.add-panel__newbrand { inline-size: 12rem; }
+.add-panel__bar {
   display: flex; align-items: center; gap: var(--space-3);
-  margin-block-end: var(--space-3);
+  margin-block: var(--space-4) var(--space-1);
 }
-.add-panel__title { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
-.add-panel__head .btn { margin-inline-start: auto; }
-.add-panel__list { max-block-size: 22rem; overflow: auto; }
-.add-panel__hint { margin: 0; font-size: var(--text-sm); color: var(--ink-3); }
-.add-panel__acts { margin-block-start: var(--space-3); text-align: end; }
-.add-tbl tr[data-done="true"] { color: var(--ink-4); }
-.add-tbl td:first-child { inline-size: 2rem; }
+.add-panel__count { font-size: var(--text-xs); color: var(--ink-3); }
+.add-panel__bar .btn { margin-inline-start: auto; }
+.add-panel__list { max-block-size: 20rem; overflow: auto; }
+.add-panel__hint { margin: 0; padding: var(--space-3) 0; font-size: var(--text-sm); color: var(--ink-3); }
+.add-tbl { border: 0; inline-size: auto; min-inline-size: 24rem; }
+.add-tbl td { padding: var(--space-2) var(--space-2); border-block-end: 1px solid var(--line); }
+.add-tbl tr[data-on="true"] { background: var(--accent-weak); }
+.add-tbl__cb { inline-size: 2rem; }
+.add-tbl__cb input { inline-size: 1rem; block-size: 1rem; }
+.add-tbl__comm { color: var(--ink-3); text-align: start; padding-inline-start: var(--space-4); font-variant-numeric: tabular-nums; }
+.add-panel__done { margin-block-start: var(--space-3); }
+.add-panel__done summary { cursor: pointer; font-size: var(--text-xs); color: var(--ink-3); }
+.add-panel__donelist { margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.add-panel__donelist li {
+  display: flex; justify-content: space-between;
+  padding: 2px 0; font-size: var(--text-xs); color: var(--ink-4);
+}
+.add-panel__comm { font-variant-numeric: tabular-nums; }
+.add-panel__foot {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-block-start: var(--space-4);
+}
 .add-panel__manual { margin-block-start: var(--space-4); border-block-start: 1px solid var(--line); padding-block-start: var(--space-3); }
 .add-panel__manual summary { cursor: pointer; font-size: var(--text-sm); color: var(--ink-2); }
 .add-panel__manual .add-form { margin-block-start: var(--space-3); }
-
-/* 弹珠机按品牌分组 */
-.brand-group {
-  display: flex; align-items: baseline; gap: var(--space-3);
-  margin: var(--space-6) 0 var(--space-3);
-  padding-block-end: var(--space-2);
-  border-block-end: 1px solid var(--line);
-}
-.brand-group__name { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
-.brand-group__n { font-size: var(--text-xs); color: var(--ink-3); }
-.brand-group__add { margin-inline-start: auto; }
-@media (max-width: 47.99em) {
-  .brand-group { margin-block-start: var(--space-5); }
-  .brand-group__add { font-size: 12px; }
-}
-
-/* 新增面板里的品牌选择 */
-.add-panel__brand { flex-direction: row; align-items: center; gap: var(--space-3); margin-block-end: var(--space-3); }
-.add-panel__brand .field__label { flex: none; margin: 0; }
-.add-panel__sel { inline-size: auto; min-inline-size: 9rem; }
-.add-panel__newbrand { inline-size: 12rem; }

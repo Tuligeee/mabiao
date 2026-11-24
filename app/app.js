@@ -1187,163 +1187,174 @@ let ADD_BRAND = null;
 function addMachineForm(kind) {
   const box = el('div', 'add-panel');
 
-  // ---------- 品牌（只有弹珠机要选） ----------
+  // ---------- 品牌 ----------
   let getBrand = () => undefined;
+  let brandWrap = null;
+  let newIn = null;
+  let sel = null;
   if (kind === 'pachinko') {
-    const exists = (BRANDS || []).map((b) => b.brand);
-    const wrap = el('label', 'field add-panel__brand');
-    wrap.appendChild(el('span', 'field__label', '品牌'));
-    const sel = el('select', 'input add-panel__sel');
-    exists.forEach((b) => {
-      const o = el('option', null, b);
-      o.value = b;
+    brandWrap = el('div', 'add-panel__brand');
+    brandWrap.appendChild(el('span', 'add-panel__k', '品牌'));
+    sel = el('select', 'input add-panel__sel');
+    (BRANDS || []).forEach((b) => {
+      const o = el('option', null, b.brand);
+      o.value = b.brand;
       sel.appendChild(o);
     });
-    const nw = el('option', null, '+ 新品牌');
-    nw.value = '__new__';
-    sel.appendChild(nw);
-    wrap.appendChild(sel);
+    sel.appendChild(el('option', null, '＋ 新品牌')).value = '__new__';
+    brandWrap.appendChild(sel);
 
-    const newIn = el('input', 'input add-panel__newbrand');
+    newIn = el('input', 'input add-panel__newbrand');
     newIn.type = 'text';
     newIn.autocomplete = 'off';
-    newIn.placeholder = '品牌名，比如 潮弹社';
+    newIn.placeholder = '新品牌名';
     newIn.setAttribute('aria-label', '新品牌名称');
     newIn.hidden = true;
-    wrap.appendChild(newIn);
+    brandWrap.appendChild(newIn);
 
     sel.addEventListener('change', () => {
       newIn.hidden = sel.value !== '__new__';
       if (!newIn.hidden) newIn.focus();
     });
-    box.appendChild(wrap);
+    box.appendChild(brandWrap);
     getBrand = () => (sel.value === '__new__' ? newIn.value.trim() : sel.value);
   }
 
-  // ---------- 从宝点拉清单勾选 ----------
-  const head = el('div', 'add-panel__head');
-  head.appendChild(el('span', 'add-panel__title', '从宝点添加'));
-  const pull = el('button', 'btn btn--sm', '拉取机台清单');
+  // ---------- 机台列表 ----------
+  const bar = el('div', 'add-panel__bar');
+  bar.appendChild(el('span', 'add-panel__k', '从宝点选择'));
+  const countTip = el('span', 'add-panel__count', '');
+  bar.appendChild(countTip);
+  const pull = el('button', 'btn btn--sm btn--quiet', '重新拉取');
   pull.type = 'button';
-  head.appendChild(pull);
-  box.appendChild(head);
+  bar.appendChild(pull);
+  box.appendChild(bar);
 
   const listBox = el('div', 'add-panel__list');
   box.appendChild(listBox);
 
-  const bulkActs = el('div', 'add-panel__acts');
-  const addSel = el('button', 'btn btn--sm btn--primary', '添加选中');
+  const foot = el('div', 'add-panel__foot');
+  const addSel = el('button', 'btn btn btn--primary', '添加选中');
   addSel.type = 'button';
   addSel.disabled = true;
-  bulkActs.appendChild(addSel);
-  bulkActs.hidden = true;
-  box.appendChild(bulkActs);
+  const closeBtn = el('button', 'btn btn--quiet', '取消');
+  closeBtn.type = 'button';
+  closeBtn.addEventListener('click', () => { ADD_KIND = null; ADD_BRAND = null; renderUnits(); });
+  foot.appendChild(addSel);
+  foot.appendChild(closeBtn);
+  box.appendChild(foot);
 
-  pull.addEventListener('click', async () => {
+  let cbs = [];
+  const sync = () => {
+    const n = cbs.filter((c) => c.checked).length;
+    addSel.disabled = n === 0;
+    addSel.textContent = n ? ('添加选中 ' + n + ' 台') : '添加选中';
+    cbs.forEach((c) => { c.closest('tr').dataset.on = c.checked ? 'true' : 'false'; });
+  };
+
+  const load = async () => {
     pull.disabled = true;
-    pull.textContent = '拉取中…';
     listBox.innerHTML = '';
     listBox.appendChild(el('p', 'add-panel__hint', '正在从宝点取最近三天的机台…'));
     try {
       const d = await api('/api/manage/devices?shop_id=' + encodeURIComponent(MSHOP.id));
       const mine = (d.rows || []).filter((x) => x.kind === kind);
+      const todo = mine.filter((x) => !x.added);
+      const done = mine.filter((x) => x.added);
       listBox.innerHTML = '';
+      cbs = [];
+
       if (!mine.length) {
+        countTip.textContent = '';
         listBox.appendChild(el('p', 'add-panel__hint', '宝点最近三天没有这类机台'));
+        sync();
         return;
       }
-      const tb = el('table', 'tbl tbl--tight add-tbl');
-      const thead = el('thead');
-      const hr = el('tr');
-      const thAll = el('th');
-      const cbAll = el('input');
-      cbAll.type = 'checkbox';
-      cbAll.setAttribute('aria-label', '全选未添加的');
-      thAll.appendChild(cbAll);
-      hr.appendChild(thAll);
-      ['机台', '通讯ID', '状态'].forEach((t) => {
-        const th = el('th', '', t);
-        th.scope = 'col';
-        hr.appendChild(th);
-      });
-      thead.appendChild(hr);
-      tb.appendChild(thead);
+      countTip.textContent = '未添加 ' + todo.length + ' / 共 ' + mine.length;
 
+      if (!todo.length) {
+        listBox.appendChild(el('p', 'add-panel__hint', '宝点里的这类机台都已经在系统里了'));
+      }
+
+      const tb = el('table', 'tbl add-tbl');
       const body = el('tbody');
-      const cbs = [];
-      mine.forEach((x) => {
+      todo.forEach((x) => {
         const tr = el('tr');
-        if (x.added) tr.dataset.done = 'true';
-        const td0 = el('td');
-        if (!x.added) {
-          const cb = el('input');
-          cb.type = 'checkbox';
-          cb.value = x.comm;
-          cb.dataset.name = x.name;
-          cb.setAttribute('aria-label', '选择 ' + x.name + ' ' + x.comm);
-          cbs.push(cb);
-          td0.appendChild(cb);
-        }
+        const td0 = el('td', 'add-tbl__cb');
+        const cb = el('input');
+        cb.type = 'checkbox';
+        cb.value = x.comm;
+        cb.dataset.name = x.name;
+        cb.setAttribute('aria-label', '选择 ' + x.name + ' ' + x.comm);
+        cbs.push(cb);
+        td0.appendChild(cb);
         tr.appendChild(td0);
         tr.appendChild(el('td', 'name', x.name));
-        tr.appendChild(el('td', '', x.comm));
-        tr.appendChild(el('td', '', x.added ? '已在系统里' : '可添加'));
+        tr.appendChild(el('td', 'add-tbl__comm', x.comm));
         body.appendChild(tr);
+        tb.appendChild(body);
       });
-      tb.appendChild(body);
-      listBox.appendChild(tb);
+      if (todo.length) {
+        tb.appendChild(body);
+        listBox.appendChild(tb);
+        cbs.forEach((c) => c.addEventListener('change', sync));
+      }
 
-      const sync = () => {
-        const n = cbs.filter((c) => c.checked).length;
-        addSel.disabled = n === 0;
-        addSel.textContent = n ? ('添加选中 ' + n + ' 台') : '添加选中';
-      };
-      cbs.forEach((c) => c.addEventListener('change', sync));
-      cbAll.addEventListener('change', () => {
-        cbs.forEach((c) => { c.checked = cbAll.checked; });
-        sync();
-      });
-      bulkActs.hidden = false;
+      if (done.length) {
+        const more = el('details', 'add-panel__done');
+        more.appendChild(el('summary', '', '已添加的 ' + done.length + ' 台'));
+        const dl = el('ul', 'add-panel__donelist');
+        done.forEach((x) => {
+          const li = el('li');
+          li.appendChild(el('span', null, x.name));
+          li.appendChild(el('span', 'add-panel__comm', x.comm));
+          dl.appendChild(li);
+        });
+        more.appendChild(dl);
+        listBox.appendChild(more);
+      }
       sync();
-
-      addSel.onclick = async () => {
-        const picked = cbs.filter((c) => c.checked);
-        if (!picked.length) return;
-        const br = getBrand();
-        if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
-        addSel.disabled = true;
-        addSel.textContent = '添加中…';
-        let ok = 0;
-        for (const cb of picked) {
-          try {
-            await api('/api/manage/unit/save', {
-              shop_id: MSHOP.id,
-              name: cb.dataset.name + ' ' + cb.value,
-              comms: cb.value,
-              kind,
-              brand: kind === 'pachinko' ? br : undefined,
-              shared: false,
-            });
-            ok += 1;
-          } catch (e) { /* 单台失败不影响其他 */ }
-        }
-        toast('已添加 ' + ok + ' 台');
-        ADD_KIND = null;
-        BRANDS = null;
-        await renderUnits();
-      };
     } catch (e) {
       listBox.innerHTML = '';
       listBox.appendChild(el('p', 'add-panel__hint', String(e.message || e)));
     } finally {
       pull.disabled = false;
-      pull.textContent = '重新拉取';
     }
-  });
+  };
+
+  pull.addEventListener('click', load);
+
+  addSel.onclick = async () => {
+    const picked = cbs.filter((c) => c.checked);
+    if (!picked.length) return;
+    const br = getBrand();
+    if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
+    addSel.disabled = true;
+    addSel.textContent = '添加中…';
+    let ok = 0;
+    for (const cb of picked) {
+      try {
+        await api('/api/manage/unit/save', {
+          shop_id: MSHOP.id,
+          name: cb.dataset.name + ' ' + cb.value,
+          comms: cb.value,
+          kind,
+          brand: kind === 'pachinko' ? br : undefined,
+          shared: false,
+        });
+        ok += 1;
+      } catch (e) { /* 单台失败不影响其他 */ }
+    }
+    toast('已添加 ' + ok + ' 台');
+    ADD_KIND = null;
+    ADD_BRAND = null;
+    BRANDS = null;
+    await renderUnits();
+  };
 
   // ---------- 手工添加 ----------
   const manual = el('details', 'add-panel__manual');
-  manual.appendChild(el('summary', '', '手工添加（宝点里没有的机台）'));
+  manual.appendChild(el('summary', '', '宝点里没有，手工录'));
   const form = el('div', 'add-form');
 
   const f1 = el('label', 'field');
@@ -1356,7 +1367,7 @@ function addMachineForm(kind) {
   form.appendChild(f1);
 
   const f2 = el('label', 'field');
-  f2.appendChild(el('span', 'field__label', '通讯ID，多个用逗号隔开'));
+  f2.appendChild(el('span', 'field__label', '通讯ID'));
   const comms = el('input', 'input');
   comms.type = 'text';
   comms.autocomplete = 'off';
@@ -1364,15 +1375,11 @@ function addMachineForm(kind) {
   f2.appendChild(comms);
   form.appendChild(f2);
 
-  const acts = el('div', 'add-form__acts');
+  const mActs = el('div', 'add-form__acts');
   const save = el('button', 'btn btn--sm btn--primary', '保存');
   save.type = 'button';
-  const cancel = el('button', 'btn btn--sm btn--quiet', '取消');
-  cancel.type = 'button';
-  cancel.addEventListener('click', () => { ADD_KIND = null; ADD_BRAND = null; renderUnits(); });
-  acts.appendChild(save);
-  acts.appendChild(cancel);
-  form.appendChild(acts);
+  mActs.appendChild(save);
+  form.appendChild(mActs);
   manual.appendChild(form);
   box.appendChild(manual);
 
@@ -1392,6 +1399,7 @@ function addMachineForm(kind) {
       });
       toast('已新增');
       ADD_KIND = null;
+      ADD_BRAND = null;
       BRANDS = null;
       await renderUnits();
     } catch (e) {
@@ -1400,6 +1408,7 @@ function addMachineForm(kind) {
     }
   });
 
+  load();
   return box;
 }
 
