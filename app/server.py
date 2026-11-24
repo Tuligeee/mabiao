@@ -1296,7 +1296,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not m:
                     return self._send(404, {"error": "no such machine"})
                 sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
-                png = qr_label_png(code, "%s/?c=%s" % (_qr_origin(), code), m["name"], sub)
+                png = qr_label_png("%s/?c=%s" % (_qr_origin(), code), m["name"])
                 body = png
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
@@ -1638,8 +1638,8 @@ def _qr_font(size: int, bold: bool = False):
     return f
 
 
-def qr_label_png(code: str, url: str, title: str, sub: str) -> bytes:
-    """一张贴纸（白底）：机台名 / 系统名+编号 / 二维码 / P位+通讯ID / 提示。"""
+def qr_label_png(url: str, title: str) -> bytes:
+    """一张贴纸（白底）：机台名 + 二维码 + 「码表二维码」。"""
     import qrcode
     from PIL import Image, ImageDraw
 
@@ -1651,28 +1651,22 @@ def qr_label_png(code: str, url: str, title: str, sub: str) -> bytes:
     qw = qimg.height
 
     W = 660
-    pad_top, gap1, gap2, tail = 34, 56, 26, 78
-    H = pad_top + gap1 + 42 + qw + gap2 + 44 + tail
+    pad_top, gap1, gap2, tail = 40, 30, 30, 40
+    H = pad_top + 50 + gap1 + qw + gap2 + 40 + tail
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, W - 1, H - 1], outline=(226, 228, 232), width=2)
 
-    f_name = _qr_font(42, bold=True)
-    f_meta = _qr_font(24)
-    f_sub = _qr_font(28, bold=True)
-    f_tip = _qr_font(22)
+    f_name = _qr_font(44, bold=True)
+    f_cap = _qr_font(26)
 
     def center(text, f, y, fill=(16, 16, 18)):
         w = d.textlength(text, font=f)
         d.text(((W - w) / 2, y), text, fill=fill, font=f)
 
     center(title, f_name, pad_top)
-    center("码表核对 · " + code, f_meta, pad_top + gap1, (110, 110, 118))
-    img.paste(qimg, ((W - qw) // 2, pad_top + gap1 + 42))
-
-    y = pad_top + gap1 + 42 + qw + gap2
-    center(sub, f_sub, y)
-    center("每天关门后扫码填数", f_tip, y + 44, (110, 110, 118))
+    img.paste(qimg, ((W - qw) // 2, pad_top + 50 + gap1))
+    center("码表二维码", f_cap, pad_top + 50 + gap1 + qw + gap2, (110, 110, 118))
 
     buf = io.BytesIO()
     img.save(buf, "PNG")
