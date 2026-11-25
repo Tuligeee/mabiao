@@ -28,7 +28,7 @@ const CWSJ_KEY = 'cwsj_token_v1';
 // 和任务平台同域时，直接复用它的登录态，不用二次登录
 // 但主动点过「退出」就不再复用，否则退不掉
 function getToken() {
-  if (localStorage.getItem('meter_logout') === '1') return '';
+  // 点退出时已经把 token 清掉了，这里只认 token 本身
   return localStorage.getItem(TOKEN_KEY)
     || localStorage.getItem(CWSJ_KEY)
     || '';
@@ -2351,9 +2351,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   $('btnLogout').addEventListener('click', () => {
-    localStorage.setItem('meter_logout', '1');
+    // 退出 = 连任务平台的登录态一起退掉
+    localStorage.removeItem('meter_logout');
     localStorage.removeItem(TOKEN_KEY);
-    location.reload();
+    localStorage.removeItem(CWSJ_KEY);
+    const back = location.href.split('?')[0].split('#')[0];
+    location.href = '/cwsj/?next=' + encodeURIComponent(back);
   });
 
   boot().catch((e) => toast(String(e.message || e), 'bad'));
