@@ -538,6 +538,13 @@ def t_recon_range():
                           "from": ["2026-11-01"], "to": ["2026-11-03"]})
     days = sorted({x["day"] for x in r.get("rows", [])})
     eq(days, ["2026-11-01", "2026-11-02", "2026-11-03"], "区间应覆盖 3 天")
+    # 导出要跟核对页同列：区间行必须带上玩法字段和珠/卡指标
+    row = [x for x in r["rows"] if x["day"] == "2026-11-02"][0]
+    eq(row["kind"], "pachinko", "区间行带机型")
+    assert row["fields"], "区间行要带玩法字段"
+    assert row["p"] is not None, "区间行要带珠/卡指标"
+    eq(row["p"]["tokens"], 0, "投珠两天一样 → 增量 0")
+    eq(row["status"], "正常", "有卡头有读数 → 正常")
 
 
 CASES = [

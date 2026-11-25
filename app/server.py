@@ -2663,7 +2663,10 @@ def api_recon_range(q) -> dict:
         for row in r["rows"]:
             rows.append({
                 "day": day,
+                "kind": row.get("kind") or kind,
                 "name": row["name"],
+                "fields": row.get("fields"),   # 页面按它决定显示哪几列，导出也照它
+                "p": row.get("p"),             # 珠/出珠/出卡/中奖出珠都在这里
                 "meter_in": row["meter_in"],
                 "meter_out": row["meter_out"],
                 "up": row["up"],
@@ -2672,9 +2675,6 @@ def api_recon_range(q) -> dict:
                 "meter": row["meter"],
                 "diff": row["diff"],
                 "rate": row["rate"],
-                "paid": (row.get("p") or {}).get("paid"),
-                "win": (row.get("p") or {}).get("win"),
-                "keep": (row.get("p") or {}).get("keep"),
                 "status": row["status"],
                 "reason": row.get("reason"),
                 "reason_note": row.get("reason_note"),

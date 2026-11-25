@@ -711,21 +711,9 @@ function renderRecon() {
   const head = $('reconHead');
   head.innerHTML = '';
   const hr = el('tr');
-  const uni = {};
-  (d.rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
-  const hasF = (k) => !!uni[k];
-  const cols = pach
-    ? [['机台', '']]
-      .concat(hasF('in_r') ? [['码表投币', 'num'], ['卡头上币', 'num']] : [])
-      .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
-      .concat(hasF('p_out') ? [['出珠', 'num']] : [])
-      .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
-      .concat(hasF('p_out') && hasF('in_r') ? [['中奖出珠', 'num']] : [])
-      .concat([['收币误差', 'num'], ['状态', ''], ['原因', '']])
-    : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
-       ['误差', 'num'], ['状态', ''], ['原因', '']];
-  cols.forEach(([t, cls]) => {
-    const th = el('th', cls, t);
+  const cols = reconColumns(d.rows, pach);
+  cols.forEach((c) => {
+    const th = el('th', c.cls, c.label);
     th.scope = 'col';
     hr.appendChild(th);
   });
@@ -737,68 +725,105 @@ function renderRecon() {
 
   d.rows.forEach((r) => {
     const tr = el('tr');
-    const tdName = el('td', 'name');
-    const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-    if (nm2) {
-      tdName.appendChild(document.createTextNode(nm2[1]));
-      tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
-    } else {
-      tdName.textContent = r.name;
-    }
-    tr.appendChild(tdName);
-
-    if (pach) {
-      const pm = r.p || {};
-      const val = (v) => (v === null || v === undefined ? '-' : fmt(v));
-      if (hasF('in_r')) {
-        tr.appendChild(el('td', 'num', val(r.meter_in)));
-        tr.appendChild(el('td', 'num', val(r.up)));
-      }
-      if (hasF('p_tokens')) tr.appendChild(el('td', 'num', val(pm.tokens)));
-      if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
-      if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
-      // 中奖出珠 = 出珠 − 投币折成的珠（没有出珠的玩法不显示）
-      if (hasF('p_out') && hasF('in_r')) tr.appendChild(el('td', 'num', val(pm.win)));
-      const td = el('td', 'num lead', val(r.diff));
-      if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
-      tr.appendChild(td);
-    } else {
-      tr.appendChild(el('td', 'num', fmt(r.up)));
-      tr.appendChild(el('td', 'num', fmt(r.down)));
-      tr.appendChild(el('td', 'num', fmt(r.meter)));
-      const td = el('td', 'num lead', fmt(r.diff));
-      if (r.diff !== null && Math.abs(r.diff) >= 1000) td.dataset.tone = 'bad';
-      tr.appendChild(td);
-    }
-
-    const st = el('td');
-    st.appendChild(statusTag(r.status));
-    if (S.role === 'hq' && (r.reset || r.status === '读数比昨天小')) {
-      const rb = el('button', 'reset-btn', r.reset ? '已按归零' : '按归零算');
-      rb.type = 'button';
-      rb.dataset.on = r.reset ? 'true' : 'false';
-      rb.addEventListener('click', async () => {
-        rb.disabled = true;
-        try {
-          await api('/api/recon/reset',
-            { shop_id: S.shopId, day: S.day, unit_id: r.unit_id, on: !r.reset });
-          toast(r.reset ? '已取消归零' : '已按归零计算');
-          await loadRecon();
-        } catch (e) {
-          toast(String(e.message || e), 'bad');
-          rb.disabled = false;
+    cols.forEach((c) => {
+      if (c.key === 'name') {
+        const tdName = el('td', 'name');
+        const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
+        if (nm2) {
+          tdName.appendChild(document.createTextNode(nm2[1]));
+          tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
+        } else {
+          tdName.textContent = r.name;
         }
-      });
-      st.appendChild(rb);
-    }
-    tr.appendChild(st);
-    tr.appendChild(reasonCell(r));
+        tr.appendChild(tdName);
+        return;
+      }
+      if (c.key === 'status') {
+        const st = el('td');
+        st.appendChild(statusTag(r.status));
+        if (S.role === 'hq' && (r.reset || r.status === '读数比昨天小')) {
+          const rb = el('button', 'reset-btn', r.reset ? '已按归零' : '按归零算');
+          rb.type = 'button';
+          rb.dataset.on = r.reset ? 'true' : 'false';
+          rb.addEventListener('click', async () => {
+            rb.disabled = true;
+            try {
+              await api('/api/recon/reset',
+                { shop_id: S.shopId, day: S.day, unit_id: r.unit_id, on: !r.reset });
+              toast(r.reset ? '已取消归零' : '已按归零计算');
+              await loadRecon();
+            } catch (e) {
+              toast(String(e.message || e), 'bad');
+              rb.disabled = false;
+            }
+          });
+          st.appendChild(rb);
+        }
+        tr.appendChild(st);
+        return;
+      }
+      if (c.key === 'reason') {
+        tr.appendChild(reasonCell(r));
+        return;
+      }
+      const v = c.text(r);
+      const td = el('td', c.cls, v === null ? '-' : nf.format(v));
+      if (c.bad && c.bad(r)) td.dataset.tone = 'bad';
+      tr.appendChild(td);
+    });
     // 手机上每行变卡片，用 data-label 显示列名
     [...tr.children].forEach((td, i) => {
-      if (cols[i] && cols[i][0]) td.dataset.label = cols[i][0];
+      if (cols[i]) td.dataset.label = cols[i].label;
     });
     body.appendChild(tr);
   });
+}
+
+// 核对表的列定义：页面和导出共用这一份，避免两边各写一套导致文件对不上页面
+function reconColumns(rows, pach) {
+  const uni = {};
+  (rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
+  const hasF = (k) => !!uni[k];
+  const num = (v) => (v === null || v === undefined || v === '' ? null : Math.round(v));
+  const pm = (r) => r.p || {};
+  const cols = [{ key: 'name', label: '机台', text: (r) => r.name }];
+  if (pach) {
+    if (hasF('in_r')) {
+      cols.push({ key: 'meter_in', label: '码表投币', cls: 'num', text: (r) => num(r.meter_in) });
+      cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
+    }
+    if (hasF('p_tokens')) {
+      cols.push({ key: 'tokens', label: '码表投珠', cls: 'num', text: (r) => num(pm(r).tokens) });
+    }
+    if (hasF('p_out')) {
+      cols.push({ key: 'out', label: '出珠', cls: 'num', text: (r) => num(pm(r).out) });
+    }
+    if (hasF('p_cards')) {
+      cols.push({ key: 'cards', label: '出卡', cls: 'num', text: (r) => num(pm(r).cards) });
+    }
+    // 中奖出珠 = 出珠 − 投币折成的珠（没有出珠的玩法不显示）
+    if (hasF('p_out') && hasF('in_r')) {
+      cols.push({ key: 'win', label: '中奖出珠', cls: 'num', text: (r) => num(pm(r).win) });
+    }
+    cols.push({
+      key: 'diff', label: '收币误差', cls: 'num lead', text: (r) => num(r.diff),
+      bad: (r) => r.diff !== null && Math.abs(r.diff) >= 1,
+    });
+  } else {
+    cols.push({ key: 'up', label: '上币', cls: 'num', text: (r) => num(r.up) });
+    cols.push({ key: 'down', label: '下币', cls: 'num', text: (r) => num(r.down) });
+    cols.push({ key: 'meter', label: '码表收币', cls: 'num', text: (r) => num(r.meter) });
+    cols.push({
+      key: 'diff', label: '误差', cls: 'num lead', text: (r) => num(r.diff),
+      bad: (r) => r.diff !== null && Math.abs(r.diff) >= 1000,
+    });
+  }
+  cols.push({ key: 'status', label: '状态', text: (r) => r.status });
+  cols.push({
+    key: 'reason', label: '原因', cls: 'reason',
+    text: (r) => [r.reason, r.reason_note].filter(Boolean).join(' ') || null,
+  });
+  return cols;
 }
 
 const REASONS = ['换码表或归零重计', '机器故障没走系统', '未下完分断电',
@@ -813,6 +838,7 @@ function reasonCell(r) {
     b.addEventListener('click', () => reasonDialog(r));
     td.appendChild(b);
     if (r.reason_note) {
+      td.appendChild(document.createTextNode(' '));
       td.appendChild(el('span', 'reason__note', r.reason_note));
     }
   } else if (hasDiff) {
@@ -975,36 +1001,9 @@ async function doExport(fromDay, toDay) {
     + '&from=' + encodeURIComponent(fromDay) + '&to=' + encodeURIComponent(toDay));
   if (!d.rows.length) throw new Error('这段时间没有数据');
 
-  const head = pach
-    ? ['日期', '机台名称', '宝点投币', '码表投币', '差',
-       '投币出珠', '中奖出珠', '实际收珠', '返珠率', '误差原因']
-    : ['日期', '机台名称', '码表上币', '码表下币', '卡头上币', '卡头下币',
-       '卡头收币', '码表收币', '收币误差', '误差率', '误差原因'];
-  const cell = (v) => {
-    if (v === null || v === undefined) return '';
-    const t = String(v);
-    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
-  };
-  const num = (v) => (v === null || v === undefined ? '' : v);
-
-  const lines = [head.join(',')];
-  d.rows.forEach((r) => {
-    const reason = [r.reason, r.reason_note].filter(Boolean).join('：');
-    const rate = (r.rate === null || r.rate === undefined)
-      ? '' : (r.rate * 100).toFixed(1) + '%';
-    const row = pach
-      ? [r.day, r.name, num(r.up), num(r.meter), num(r.diff),
-         num(r.paid), num(r.win), num(r.keep), rate, reason]
-      : [r.day, r.name,
-         num(r.meter_in), num(r.meter_out),
-         num(r.up), num(r.down),
-         num(r.head), num(r.meter),
-         num(r.diff), rate, reason];
-    lines.push(row.map(cell).join(','));
-  });
-
+  const text = buildReconCsv(d, pach);
   const shop = (S.shops.find((x) => x.id === S.shopId) || {}).name || '门店';
-  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = '核对_' + shop + '_' + d.from + '_' + d.to + (pach ? '_弹珠机' : '_推币机') + '.csv';
@@ -1013,6 +1012,27 @@ async function doExport(fromDay, toDay) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast('已导出 ' + d.rows.length + ' 行');
+}
+
+// 导出内容和核对页共用同一份列定义：列名、取值、四舍五入都一致
+function buildReconCsv(d, pach) {
+  const cols = reconColumns(d.rows, pach);
+  const head = ['日期'].concat(cols.map((c) => c.label));
+  const cell = (v) => {
+    if (v === null || v === undefined) return '';
+    const t = String(v);
+    return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const lines = [head.map(cell).join(',')];
+  d.rows.forEach((r) => {
+    const row = [r.day];
+    cols.forEach((c) => {
+      const v = c.text(r);
+      row.push(v === null || v === undefined ? '' : v);
+    });
+    lines.push(row.map(cell).join(','));
+  });
+  return lines.join('\r\n');
 }
 
 /* ------------------------------------------------------------ 全链 */

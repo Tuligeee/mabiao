@@ -51,4 +51,6 @@ _patch_*.py
 
 
 _preview/
+_tmp/
+_tests/_rundir/
 
