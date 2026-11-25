@@ -232,12 +232,13 @@ def resolve_shop(me: dict) -> str | None:
         if len(cands) == 1:
             c.execute("INSERT OR REPLACE INTO shop_map(cwsj_key,shop_id) VALUES(?,?)",
                       (key, cands[0]["id"]))
-            print("[bind] %r -> %s" % (name, cands[0]["name"]), flush=True)
+            if not os.environ.get("METER_QUIET"):
+                print("[bind] %r -> %s" % (name, cands[0]["name"]), flush=True)
             return cands[0]["id"]
-
-        print("[bind] 未匹配 cwsj=%r key=%r 候选=%s | 本地门店=%s"
-              % (name, key, [x["name"] for x in cands] or "无",
-                 " / ".join(s["name"] for s in shops)), flush=True)
+        if not os.environ.get("METER_QUIET"):
+            print("[bind] 未匹配 cwsj=%r key=%r 候选=%s | 本地门店=%s"
+                  % (name, key, [x["name"] for x in cands] or "无",
+                     " / ".join(s["name"] for s in shops)), flush=True)
     return None
 
 
@@ -1002,6 +1003,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         tout = delta("out_r")
 
         p_metrics = None
+        d_tokens = d_out = d_cards = None
         if is_p:
             d_tokens = delta("p_tokens")
             d_out = delta("p_out")
@@ -1046,16 +1048,18 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         else:
             meter = (tin - tout) if (tin is not None and tout is not None) else None
 
+        # 读数本身的毛病优先于「有没有卡头数据」：先报第一次填、再报倒退
+        neg = any(v is not None and v < 0 for v in (tin, tout, d_tokens, d_out, d_cards))
         if not rd:
             status = "今天还没填"
+        elif pv is None and not reset:
+            status = "第一次填"
+        elif neg and not reset:
+            status = "读数比昨天小"
         elif not got and prov == "manual":
             status = "只抄表（无卡头）"
         elif not got:
             status = "卡头今天没有数据"
-        elif pv is None:
-            status = "第一次填"
-        elif (rd["in_r"] or 0) < (pv["in_r"] or 0) or (rd["out_r"] or 0) < (pv["out_r"] or 0):
-            status = "正常" if reset else "读数比昨天小"
         else:
             status = "正常"
 
