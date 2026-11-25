@@ -89,8 +89,13 @@ def token(base: str = DEFAULT_BASE, shop_id: str = "") -> str:
     d = _load()
     key = str(shop_id or "")
     ent = (d.get("tokens") or {}).get(key) or {}
-    if not ent and not key:
+    if not ent and d.get("token"):
         ent = d                      # 兼容旧的单 token 结构
+        if key:                      # 认领到当前门店，下次直接命中
+            d.setdefault("tokens", {})[key] = {
+                "token": d["token"], "saved_at": d.get("saved_at") or 0,
+                "base": d.get("base") or base}
+            _save(d)
     tok = (ent.get("token") or "").strip()
     saved = float(ent.get("saved_at") or 0)
     fresh = saved and (time.time() - saved) < 30 * 3600
