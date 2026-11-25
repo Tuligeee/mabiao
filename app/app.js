@@ -745,10 +745,8 @@ function renderRecon() {
       if (hasF('p_tokens')) tr.appendChild(el('td', 'num', val(pm.tokens)));
       if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
       if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
-      // 中奖出珠 = 出珠 − 投币折成的珠；负数说明一币几珠配高了
-      const wtd = el('td', 'num', val(pm.win));
-      if (pm.win !== null && pm.win !== undefined && pm.win < 0) wtd.dataset.tone = 'bad';
-      tr.appendChild(wtd);
+      // 中奖出珠 = 出珠 − 投币折成的珠
+      tr.appendChild(el('td', 'num', val(pm.win)));
       const td = el('td', 'num lead', val(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
       tr.appendChild(td);
