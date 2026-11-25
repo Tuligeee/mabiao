@@ -167,7 +167,8 @@ def ensure_codes():
             "FROM units u ORDER BY u.shop_id, u.name, u.id")]
         groups = {}
         for r in rows:
-            base = re.sub(r"\s+\d{5,}$", "", r["name"]).strip() or r["name"]
+            # 「塔兰弹珠机-001 817879」和「萌力双胞胎弹珠机-001」都要归到同一组
+            base = re.sub(r"[\s\-_]+\d+$", "", r["name"]).strip() or r["name"]
             groups.setdefault((r["shop_id"], base), []).append(r)
         for _key, items in groups.items():
             used = {it["pos"] for it in items if it.get("pos")}
