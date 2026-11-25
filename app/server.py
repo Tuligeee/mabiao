@@ -992,7 +992,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         if rd and got:
             head = (up or 0) - (0 if is_p else (down or 0))
         if is_p:
-            meter = (p_metrics or {}).get("coins_norm") if p_metrics else tin
+            # 机器上就是「总投币数」，直接跟宝点上币比；不折珠
+            meter = tin
         else:
             meter = (tin - tout) if (tin is not None and tout is not None) else None
 

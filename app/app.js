@@ -284,8 +284,8 @@ async function loadScan(code, id) {
       const flds0 = r.fields || S.pachFields || [];
       const has0 = (k) => flds0.indexOf(k) >= 0;
       if (has0('in_r')) inputs.appendChild(makeCell(r, 'in_r', r.unit === 'bead' ? '投珠数' : '投币数', 'prev_in', noop));
-      if (has0('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '总出珠', 'prev_tokens', noop));
-      if (has0('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total', noop));
+      if (has0('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '投珠数', 'prev_tokens', noop));
+      if (has0('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠数', 'prev_out_total', noop));
       if (has0('p_cards')) inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards', noop));
     } else {
       inputs.appendChild(makeCell(r, 'in_r', '入', 'prev_in', noop));
@@ -500,8 +500,8 @@ function renderEntry() {
       const has = (k) => flds.indexOf(k) >= 0;
       inputs.dataset.n = String(flds.length);
       if (has('in_r')) inputs.appendChild(makeCell(r, 'in_r', r.unit === 'bead' ? '投珠数' : '投币数', 'prev_in'));
-      if (has('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '总出珠', 'prev_tokens'));
-      if (has('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total'));
+      if (has('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '投珠数', 'prev_tokens'));
+      if (has('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠数', 'prev_out_total'));
       if (has('p_cards')) inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards'));
     } else {
       inputs.appendChild(makeCell(r, 'in_r', '入', 'prev_in'));
@@ -676,7 +676,7 @@ function renderRecon() {
   if (!d) return;
   const s = d.summary || {};
   $('reconLede').textContent = d.day + ' · '
-    + (S.kind === 'pachinko' ? '宝点投币 对比 码表投币' : '卡头收币 减 码表收币');
+    + (S.kind === 'pachinko' ? '卡头上币 对比 码表投币' : '卡头收币 减 码表收币');
   $('fDiff').textContent = fmt1(s.diff_ok);
   $('fDiff').dataset.tone = Math.abs(s.diff_ok) >= 1000 ? 'bad' : '';
   $('fMeta').textContent = `${s.ok} 台可核对 · 含异常合计 ${fmt1(s.diff_all)} · 误差超千 ${s.big} 台`;
@@ -707,15 +707,11 @@ function renderRecon() {
   (d.rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
   const hasF = (k) => !!uni[k];
   const cols = pach
-    ? [['机台', '']]
-      .concat(hasF('in_r')
-        ? [['宝点投币', 'num'],
-           ['码表投币', 'num'],
-           ['差', 'num']] : [])
-      .concat(hasF('p_tokens') && hasF('p_out')
-        ? [['码表投珠', 'num'], ['中奖出珠', 'num'], ['实际收珠', 'num'],
-           ['出卡', 'num'], ['返珠率', 'num']] : [])
-      .concat([['状态', ''], ['原因', '']])
+    ? [['机台', ''], ['码表投币', 'num'], ['卡头上币', 'num']]
+      .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
+      .concat(hasF('p_out') ? [['出珠', 'num']] : [])
+      .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
+      .concat([['留存珠', 'num'], ['收币误差', 'num'], ['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
@@ -743,24 +739,18 @@ function renderRecon() {
 
     if (pach) {
       const pm = r.p || {};
-      if (hasF('in_r')) {
-        tr.appendChild(el('td', 'num', fmt(r.up)));
-        tr.appendChild(el('td', 'num', fmt(r.meter)));
-        const td = el('td', 'num lead', fmt(r.diff));
-        if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
-        tr.appendChild(td);
-      }
-      if (hasF('p_tokens') && hasF('p_out')) {
-        tr.appendChild(el('td', 'num', pm.paid === null || pm.paid === undefined ? '-' : fmt(pm.paid)));
-        tr.appendChild(el('td', 'num', pm.win === null || pm.win === undefined ? '-' : fmt(pm.win)));
-        const kp = el('td', 'num lead', pm.keep === null || pm.keep === undefined ? '-' : fmt(pm.keep));
-        if (pm.keep !== null && pm.keep !== undefined && pm.keep < 0) kp.dataset.tone = 'bad';
-        tr.appendChild(kp);
-        tr.appendChild(el('td', 'num',
-          pm.cards === null || pm.cards === undefined ? '-' : fmt(pm.cards)));
-        tr.appendChild(el('td', 'num',
-          pm.rate === null || pm.rate === undefined ? '-' : (pm.rate * 100).toFixed(1) + '%'));
-      }
+      const val = (v) => (v === null || v === undefined ? '-' : fmt(v));
+      tr.appendChild(el('td', 'num', val(r.meter_in)));
+      tr.appendChild(el('td', 'num', val(r.up)));
+      if (hasF('p_tokens')) tr.appendChild(el('td', 'num', val(pm.tokens)));
+      if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
+      if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
+      const keepRaw = (pm.tokens === null || pm.tokens === undefined
+        || pm.out === null || pm.out === undefined) ? null : (pm.tokens - pm.out);
+      tr.appendChild(el('td', 'num', val(keepRaw)));
+      const td = el('td', 'num lead', val(r.diff));
+      if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
+      tr.appendChild(td);
     } else {
       tr.appendChild(el('td', 'num', fmt(r.up)));
       tr.appendChild(el('td', 'num', fmt(r.down)));
