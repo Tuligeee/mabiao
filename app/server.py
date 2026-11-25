@@ -974,6 +974,9 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             notes[r["unit_id"]] = dict(r)
         resets = {r["unit_id"] for r in c.execute(
             "SELECT unit_id FROM unit_resets WHERE day=?", (day,))}
+        # 卡头ID 按 P 位排（P1 在前），和墙上/Excel 的顺序对得上
+        cno = {r["comm_id"]: (r["console_no"] or "") for r in c.execute(
+            "SELECT comm_id, console_no FROM comms")}
 
     rows = []
     for u in units:
@@ -1079,6 +1082,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "p": p_metrics,
             "unit_id": u["id"], "name": u["name"], "team": u["team"],
             "shared": bool(u["shared"]), "comm_count": len(comms),
+            "comms": sorted(comms, key=lambda x: (cno.get(x, "~"), x)),
             "up": up, "down": down, "head": head, "meter_in": tin, "meter_out": tout,
             "meter": meter, "diff": diff, "rate": rate, "status": status,
             "in_r": rd["in_r"] if rd else None, "out_r": rd["out_r"] if rd else None,
@@ -2673,6 +2677,7 @@ def api_recon_range(q) -> dict:
                 "day": day,
                 "kind": row.get("kind") or kind,
                 "name": row["name"],
+                "comms": row.get("comms") or [],   # 卡头ID：共用码表时是多个
                 "fields": row.get("fields"),   # 页面按它决定显示哪几列，导出也照它
                 "p": row.get("p"),             # 珠/出珠/出卡/中奖出珠都在这里
                 "meter_in": row["meter_in"],

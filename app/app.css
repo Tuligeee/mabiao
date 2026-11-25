@@ -1113,6 +1113,12 @@ body[data-scanning="1"] { overflow: hidden; }
   white-space: nowrap;
 }
 
+/* 卡头ID 一整列：等宽小字；共用码表时是多行 ID 横排 */
+.tbl .comm {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--ink-3); white-space: nowrap;
+}
+
 /* 宝点登录提示条 */
 .bd-bar {
   display: flex; align-items: center; gap: var(--space-3);

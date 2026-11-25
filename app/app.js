@@ -724,13 +724,7 @@ function renderRecon() {
     cols.forEach((c) => {
       if (c.key === 'name') {
         const tdName = el('td', 'name');
-        const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-        if (nm2) {
-          tdName.appendChild(document.createTextNode(nm2[1]));
-          tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
-        } else {
-          tdName.textContent = r.name;
-        }
+        tdName.textContent = c.text(r);
         tr.appendChild(tdName);
         return;
       }
@@ -782,7 +776,17 @@ function reconColumns(rows, pach) {
   const hasF = (k) => !!uni[k];
   const num = (v) => (v === null || v === undefined || v === '' ? null : Math.round(v));
   const pm = (r) => r.p || {};
-  const cols = [{ key: 'name', label: '机台', text: (r) => r.name }];
+  const cols = [
+    {
+      key: 'name', label: '机台',
+      // 机台名后面那串通讯ID已经单独成列，这里只留名字
+      text: (r) => String(r.name || '').replace(/\s+\d{5,}$/, ''),
+    },
+    {
+      key: 'comms', label: '卡头ID', cls: 'comm',
+      text: (r) => ((r.comms && r.comms.length) ? r.comms.join(' / ') : null),
+    },
+  ];
   if (pach) {
     if (hasF('in_r')) {
       cols.push({ key: 'meter_in', label: '码表投币', cls: 'num', text: (r) => num(r.meter_in) });
@@ -806,8 +810,11 @@ function reconColumns(rows, pach) {
       bad: (r) => r.diff !== null && Math.abs(r.diff) >= 1,
     });
   } else {
-    cols.push({ key: 'up', label: '上币', cls: 'num', text: (r) => num(r.up) });
-    cols.push({ key: 'down', label: '下币', cls: 'num', text: (r) => num(r.down) });
+    cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
+    cols.push({ key: 'down', label: '卡头下币', cls: 'num', text: (r) => num(r.down) });
+    cols.push({ key: 'head', label: '卡头收币', cls: 'num', text: (r) => num(r.head) });
+    cols.push({ key: 'meter_in', label: '码表上币', cls: 'num', text: (r) => num(r.meter_in) });
+    cols.push({ key: 'meter_out', label: '码表下币', cls: 'num', text: (r) => num(r.meter_out) });
     cols.push({ key: 'meter', label: '码表收币', cls: 'num', text: (r) => num(r.meter) });
     cols.push({
       key: 'diff', label: '误差', cls: 'num lead', text: (r) => num(r.diff),
