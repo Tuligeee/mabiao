@@ -785,6 +785,19 @@ function reconColumns(rows, pach, mode = 'page') {
   const hasF = (k) => !!uni[k];
   const num = (v) => (v === null || v === undefined || v === '' ? null : Math.round(v));
   const pm = (r) => r.p || {};
+  // P 位：连着的一组写成 P1–P4，其它情况用斜杠拼
+  const poss = (r) => {
+    const arr = (r.poss || []).filter(Boolean);
+    if (!arr.length) return null;
+    const m = arr.map((x) => /^P(\d+)$/.exec(String(x).trim()));
+    if (m.every(Boolean)) {
+      const ns = m.map((x) => Number(x[1])).sort((a, b) => a - b);
+      const seq = ns.every((n, i) => i === 0 || n === ns[i - 1] + 1);
+      if (seq && ns.length > 1) return 'P' + ns[0] + '–P' + ns[ns.length - 1];
+      if (seq) return 'P' + ns[0];
+    }
+    return arr.join(' / ');
+  };
   const cols = [
     {
       key: 'name', label: '机台',
@@ -799,6 +812,9 @@ function reconColumns(rows, pach, mode = 'page') {
       key: 'comms', label: '卡头ID', cls: 'comm',
       text: (r) => ((r.comms && r.comms.length) ? r.comms.join(' / ') : null),
     });
+    cols.push({ key: 'poss', label: '卡头P位', cls: 'comm', text: poss });
+  } else if (!pach) {
+    cols.push({ key: 'poss', label: '卡头P位', cls: 'comm', text: poss });
   }
   if (pach) {
     if (hasF('in_r')) {

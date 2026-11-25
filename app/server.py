@@ -983,6 +983,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         # 用「当天归属」的卡头，卡头换过机台也不改写历史
         hist = comms_on(u["id"], day)
         comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
+        # 卡头ID 按 P 位排（P1 在前），和墙上/Excel 的顺序对得上
+        comms_sorted = sorted(comms, key=lambda x: (cno.get(x, "~"), x))
         got = [cards[c] for c in comms if c in cards]
         up = sum((g["up_native"] or 0) + (g["up_give"] or 0) for g in got) if got else None
         # 鲸舰店：机台维度，按机台名对上
@@ -1082,7 +1084,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "p": p_metrics,
             "unit_id": u["id"], "name": u["name"], "team": u["team"],
             "shared": bool(u["shared"]), "comm_count": len(comms),
-            "comms": sorted(comms, key=lambda x: (cno.get(x, "~"), x)),
+            "comms": comms_sorted,
+            "poss": [cno.get(x) or "" for x in comms_sorted],
             "up": up, "down": down, "head": head, "meter_in": tin, "meter_out": tout,
             "meter": meter, "diff": diff, "rate": rate, "status": status,
             "in_r": rd["in_r"] if rd else None, "out_r": rd["out_r"] if rd else None,
@@ -2678,6 +2681,7 @@ def api_recon_range(q) -> dict:
                 "kind": row.get("kind") or kind,
                 "name": row["name"],
                 "comms": row.get("comms") or [],   # 卡头ID：共用码表时是多个
+                "poss": row.get("poss") or [],     # 对应的 P 位，和 comms 一一对齐
                 "fields": row.get("fields"),   # 页面按它决定显示哪几列，导出也照它
                 "p": row.get("p"),             # 珠/出珠/出卡/中奖出珠都在这里
                 "meter_in": row["meter_in"],
