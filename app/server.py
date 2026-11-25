@@ -802,8 +802,11 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
 def fetch_day(shop_id: str, day: str) -> dict:
     """拉一天的上币 + 下币，落 card_daily（鲸舰店走机台汇总）。"""
     d = shop_row(shop_id) or {}
-    if (d.get("provider") or "baodian") == "jingjian":
+    prov = d.get("provider") or "baodian"
+    if prov == "jingjian":
         return fetch_jingjian_day(shop_id, day)
+    if prov == "manual":
+        return {"ok": True, "provider": "manual", "skipped": "只抄表，没有卡头数据"}
     shop = shop_of(d)
     bd = baodian(shop_id)
     up = bd.fetch_up(shop, day)
@@ -939,11 +942,13 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
                 "diff_all": round(sum(r["diff"] for r in rows if r["diff"] is not None), 1),
                 "diff_ok": round(sum(r["diff"] for r in ok if r["diff"] is not None), 1),
                 "warn": len([r for r in rows if r["status"] in
-                             ("读数比昨天小", "第一次填", "今天还没填", "宝点今天没有数据")]),
+                             ("读数比昨天小", "第一次填", "今天还没填",
+                              "卡头今天没有数据")]),
                 "big": len([r for r in rows if r["diff"] is not None and abs(r["diff"]) >= 1000]),
             },
         }
     units = units_of(shop_id, kind=kind, day=day)
+    prov = (shop_row(shop_id) or {}).get("provider") or "baodian"
     with conn() as c:
         cards = {}
         for r in c.execute("SELECT * FROM card_daily WHERE shop_id=? AND day=?", (shop_id, day)):
@@ -1042,8 +1047,10 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
 
         if not rd:
             status = "今天还没填"
+        elif not got and prov == "manual":
+            status = "只抄表（无卡头）"
         elif not got:
-            status = "宝点今天没有数据"
+            status = "卡头今天没有数据"
         elif pv is None:
             status = "第一次填"
         elif (rd["in_r"] or 0) < (pv["in_r"] or 0) or (rd["out_r"] or 0) < (pv["out_r"] or 0):
@@ -1081,7 +1088,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "ok": len(ok),
             "diff_all": round(sum(r["diff"] for r in rows if r["diff"] is not None), 1),
             "diff_ok": round(sum(r["diff"] for r in ok if r["diff"] is not None), 1),
-            "warn": len([r for r in rows if r["status"] in ("读数比昨天小", "第一次填", "今天还没填", "宝点今天没有数据")]),
+            "warn": len([r for r in rows if r["status"] in ("读数比昨天小", "第一次填", "今天还没填", "卡头今天没有数据")]),
             "big": len([r for r in rows if r["diff"] is not None and abs(r["diff"]) >= 1000]),
         },
     }

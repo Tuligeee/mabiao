@@ -650,7 +650,8 @@ const TONE = {
   '第一次填': 'warn',
   '读数比昨天小': 'bad',
   '今天还没填': 'warn',
-  '宝点今天没有数据': 'warn',
+  '卡头今天没有数据': 'warn',
+  '只抄表（无卡头）': 'mute',
 };
 
 function statusTag(text) {
