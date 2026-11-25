@@ -711,7 +711,8 @@ function renderRecon() {
       .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
       .concat(hasF('p_out') ? [['出珠', 'num']] : [])
       .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
-      .concat([['中奖出珠', 'num'], ['收币误差', 'num'], ['状态', ''], ['原因', '']])
+      .concat(hasF('p_out') ? [['中奖出珠', 'num']] : [])
+      .concat([['收币误差', 'num'], ['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
