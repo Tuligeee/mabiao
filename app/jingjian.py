@@ -84,11 +84,15 @@ def _request(base: str, method: str, path_qs: str, body=None, token: str = "") -
         raise JingjianError("鲸舰网络异常: %s" % (e.reason,))
 
 
-def token(base: str = DEFAULT_BASE) -> str:
-    """取可用 token；有过期的就 refresh 一次并落盘。"""
+def token(base: str = DEFAULT_BASE, shop_id: str = "") -> str:
+    """取某家店的可用 token（鲸舰 token 绑店，一店一份）；过期就 refresh。"""
     d = _load()
-    tok = (d.get("token") or "").strip()
-    saved = float(d.get("saved_at") or 0)
+    key = str(shop_id or "")
+    ent = (d.get("tokens") or {}).get(key) or {}
+    if not ent and not key:
+        ent = d                      # 兼容旧的单 token 结构
+    tok = (ent.get("token") or "").strip()
+    saved = float(ent.get("saved_at") or 0)
     fresh = saved and (time.time() - saved) < 30 * 3600
     if tok and fresh:
         return tok
@@ -107,18 +111,22 @@ def token(base: str = DEFAULT_BASE) -> str:
     new = (r.get("data") or {}).get("token")
     if not r.get("success") or not new:
         raise JingjianError("鲸舰 token 续期失败: %r" % (r.get("msg"),))
-    _save({"token": new, "saved_at": time.time(), "base": base})
+    d.setdefault("tokens", {})[key] = {"token": new, "saved_at": time.time(), "base": base}
+    _save(d)
     return new
 
 
-def save_initial(tok: str, base: str = DEFAULT_BASE) -> dict:
-    _save({"token": tok.strip(), "saved_at": time.time(), "base": base})
-    return {"ok": True}
+def save_initial(tok: str, base: str = DEFAULT_BASE, shop_id: str = "") -> dict:
+    d = _load()
+    d.setdefault("tokens", {})[str(shop_id or "")] = {
+        "token": tok.strip(), "saved_at": time.time(), "base": base}
+    _save(d)
+    return {"ok": True, "shop_id": str(shop_id or "")}
 
 
 def day_summary(base: str, shop_id, day: str) -> list:
     """一天一店的机台汇总 → [{machine, coins, count}]。"""
-    tok = token(base)
+    tok = token(base, shop_id)
     body = {"startDate": day, "endDate": day, "KindIdStr": "", "isCalculate": True}
     r = _request(base, "POST", "/device/manager/machineplaylog/getsummarylist", body, token=tok)
     if not r.get("success"):
