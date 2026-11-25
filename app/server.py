@@ -1226,6 +1226,8 @@ def cleanup_photos() -> int:
     """删掉超过 45 天的照片（文件 + 记录），返回删了几张。"""
     cut = photo_expire_day()
     n = 0
+    if not PHOTO_DIR.is_dir():
+        return 0
     with conn() as c:
         old = [dict(r) for r in c.execute("SELECT id, path FROM photos WHERE day < ?", (cut,))]
         for r in old:
@@ -1243,6 +1245,16 @@ def cleanup_photos() -> int:
     except OSError:
         pass
     return n
+
+
+def photo_gc_loop():
+    """每 6 小时扫一次，保证「一个半月」不靠有人上传才执行。"""
+    while True:
+        time.sleep(6 * 3600)
+        try:
+            cleanup_photos()
+        except Exception:
+            pass
 
 
 def save_photo(shop_id: str, unit_id: int, day: str, data_b64: str,
@@ -2832,6 +2844,7 @@ def main():
             print(f"清理过期照片 {n} 张")
     except Exception as e:
         print("清理照片失败：", e)
+    threading.Thread(target=photo_gc_loop, daemon=True).start()
     host = os.environ.get("METER_HOST", "0.0.0.0")
     srv = ThreadingHTTPServer((host, port), Handler)
     print(f"码表核对 · http://127.0.0.1:{port}")
