@@ -711,7 +711,7 @@ function renderRecon() {
       .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
       .concat(hasF('p_out') ? [['出珠', 'num']] : [])
       .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
-      .concat([['留存珠', 'num'], ['收币误差', 'num'], ['状态', ''], ['原因', '']])
+      .concat([['中奖出珠', 'num'], ['收币误差', 'num'], ['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
   cols.forEach(([t, cls]) => {
@@ -745,9 +745,10 @@ function renderRecon() {
       if (hasF('p_tokens')) tr.appendChild(el('td', 'num', val(pm.tokens)));
       if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
       if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
-      const keepRaw = (pm.tokens === null || pm.tokens === undefined
-        || pm.out === null || pm.out === undefined) ? null : (pm.tokens - pm.out);
-      tr.appendChild(el('td', 'num', val(keepRaw)));
+      // 中奖出珠 = 出珠 − 投币折成的珠；负数说明一币几珠配高了
+      const wtd = el('td', 'num', val(pm.win));
+      if (pm.win !== null && pm.win !== undefined && pm.win < 0) wtd.dataset.tone = 'bad';
+      tr.appendChild(wtd);
       const td = el('td', 'num lead', val(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
       tr.appendChild(td);
