@@ -51,7 +51,7 @@ TARGETS = {
 FILES = [
     "server.py", "index.html", "app.js", "app.css",
     "ui.js", "theme.css", "tokens.css", "machine_type_map.json",
-    "vendor/jsQR.js",
+    "vendor/jsQR.js", "jingjian.py",
 ]
 
 # 不在 app 目录里的：本地相对路径 -> 远端相对路径

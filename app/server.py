@@ -104,6 +104,12 @@ def ensure_codes():
     """给门店和每块码表补稳定编号（活码用），并补位置号 P1..Pn。"""
     with conn() as c:
         scols = [r["name"] for r in c.execute("PRAGMA table_info(shops)")]
+        if "provider" not in scols:
+            c.execute("ALTER TABLE shops ADD COLUMN provider TEXT DEFAULT 'baodian'")
+        if "jj_base" not in scols:
+            c.execute("ALTER TABLE shops ADD COLUMN jj_base TEXT")
+        if "jj_shop_id" not in scols:
+            c.execute("ALTER TABLE shops ADD COLUMN jj_shop_id TEXT")
         if "code" not in scols:
             c.execute("ALTER TABLE shops ADD COLUMN code TEXT")
         ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
@@ -494,6 +500,11 @@ CREATE TABLE IF NOT EXISTS comms(
 CREATE TABLE IF NOT EXISTS recon_frozen(
   shop_id TEXT, day TEXT, unit_id INTEGER, payload TEXT, frozen_at TEXT, frozen_by TEXT,
   PRIMARY KEY(shop_id, day, unit_id));
+-- 鲸舰机台日汇总：机器维度，没有卡头
+CREATE TABLE IF NOT EXISTS machine_daily(
+  shop_id TEXT, day TEXT, machine_name TEXT,
+  coins REAL, play_count REAL, raw TEXT, fetched_at TEXT,
+  PRIMARY KEY(shop_id, day, machine_name));
 -- 码表归零：这天起读数从 0 算，不再减前一天
 CREATE TABLE IF NOT EXISTS unit_resets(
   unit_id INTEGER, day TEXT, by TEXT, at TEXT, PRIMARY KEY(unit_id, day));
@@ -768,9 +779,31 @@ def units_of(shop_id: str, active_only: bool = True, kind: str | None = None,
 
 
 # ---------------------------------------------------------------- 取数
+def fetch_jingjian_day(shop_id: str, day: str) -> dict:
+    """鲸舰店：拉机台投币额，落 machine_daily。"""
+    import jingjian
+    d = shop_row(shop_id) or {}
+    base = d.get("jj_base") or jingjian.DEFAULT_BASE
+    rows = jingjian.day_summary(base, (d.get("jj_shop_id") or "").strip(), day)
+    ts = now()
+    with conn() as c:
+        c.execute("DELETE FROM machine_daily WHERE shop_id=? AND day=?", (shop_id, day))
+        for r in rows:
+            if not r["machine"]:
+                continue
+            c.execute("INSERT OR REPLACE INTO machine_daily"
+                      "(shop_id,day,machine_name,coins,play_count,raw,fetched_at) "
+                      "VALUES(?,?,?,?,?,?,?)",
+                      (shop_id, day, r["machine"], r["coins"], r["count"],
+                       json.dumps(r, ensure_ascii=False), ts))
+    return {"ok": True, "provider": "jingjian", "machines": len(rows)}
+
+
 def fetch_day(shop_id: str, day: str) -> dict:
-    """拉一天的上币 + 下币，落 card_daily。"""
-    d = shop_row(shop_id)
+    """拉一天的上币 + 下币，落 card_daily（鲸舰店走机台汇总）。"""
+    d = shop_row(shop_id) or {}
+    if (d.get("provider") or "baodian") == "jingjian":
+        return fetch_jingjian_day(shop_id, day)
     shop = shop_of(d)
     bd = baodian(shop_id)
     up = bd.fetch_up(shop, day)
@@ -915,6 +948,9 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         cards = {}
         for r in c.execute("SELECT * FROM card_daily WHERE shop_id=? AND day=?", (shop_id, day)):
             cards[r["comm_id"]] = dict(r)
+        mcards = {}
+        for r in c.execute("SELECT * FROM machine_daily WHERE shop_id=? AND day=?", (shop_id, day)):
+            mcards[r["machine_name"]] = dict(r)
         reads = {}
         for r in c.execute("SELECT * FROM readings WHERE shop_id=? AND day=?", (shop_id, day)):
             reads[r["unit_id"]] = dict(r)
@@ -931,6 +967,13 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
         got = [cards[c] for c in comms if c in cards]
         up = sum((g["up_native"] or 0) + (g["up_give"] or 0) for g in got) if got else None
+        # 鲸舰店：机台维度，按机台名对上
+        if not got and mcards:
+            hit = mcards.get(u["name"])
+            if hit:
+                # 鲸舰只有投币额，没有下币
+                up = hit["coins"] or 0
+                got = [{"up_native": up, "up_give": 0, "down_qty": 0}]
         down = sum((g["down_qty"] or 0) for g in got) / RATE if got else None
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day) if rd else None
