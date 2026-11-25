@@ -1113,11 +1113,16 @@ body[data-scanning="1"] { overflow: hidden; }
   white-space: nowrap;
 }
 
-/* 卡头ID 一整列：等宽小字；共用码表时是多行 ID 横排 */
+/* 卡头ID 一整列：等宽小字；共用码表的 4 个 ID 竖着折行，不把表撑爆 */
 .tbl .comm {
   font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--ink-3); white-space: nowrap;
+  color: var(--ink-3);
+  white-space: normal; overflow-wrap: anywhere;
+  max-inline-size: 12ch; line-height: 1.5;
 }
+
+/* 列多了以后的兜底：表格比容器宽时横向滚动，别把右边的列裁掉 */
+.card--flush.tbl-scroll { overflow-x: auto; }
 
 /* 宝点登录提示条 */
 .bd-bar {
