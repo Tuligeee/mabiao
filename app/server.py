@@ -1459,6 +1459,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bd_poll(b))
             if p == "/api/manage/brand/flags":
                 return self._send(200, save_brand_flags(b))
+            if p == "/api/manage/shop/provider":
+                return self._send(200, api_shop_provider(b))
             if p == "/api/recon/reset":
                 return self._send(200, api_recon_reset(b))
             if p == "/api/recon/freeze":
@@ -1583,7 +1585,7 @@ def shops_with_units() -> list:
     with conn() as c:
         rs = [dict(r) for r in c.execute(
             "SELECT s.id, s.name, COALESCE(s.provider,'baodian') AS provider, "
-            "COUNT(u.id) AS units FROM shops s "
+            "s.jj_base, s.jj_shop_id, COUNT(u.id) AS units FROM shops s "
             "LEFT JOIN units u ON u.shop_id = s.id AND u.active = 1 "
             "WHERE COALESCE(s.group_name,'') NOT IN (%s) "
             "GROUP BY s.id ORDER BY s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
@@ -2590,6 +2592,21 @@ def api_entry(q):
     out["can_edit"] = can_edit(day)
     out["edit_day"] = edit_day()
     return out
+
+
+PROVIDERS = [("baodian", "宝点"), ("jingjian", "鲸舰"), ("manual", "纯手工")]
+
+
+def api_shop_provider(b) -> dict:
+    """改门店取数方式（只有总部能改）。"""
+    require_hq()
+    sid = guard_shop(b["shop_id"])
+    prov = (b.get("provider") or "").strip()
+    if prov not in dict(PROVIDERS):
+        raise RuntimeError("取数方式只能是 baodian / jingjian / manual")
+    with conn() as c:
+        c.execute("UPDATE shops SET provider=? WHERE id=?", (prov, sid))
+    return {"ok": True, "provider": prov}
 
 
 def api_recon_reset(b) -> dict:

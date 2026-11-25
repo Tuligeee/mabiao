@@ -1092,6 +1092,30 @@ async function loadSettings() {
     const tdN = el('td', 'num', nf.format(r.units));
     tdN.dataset.label = '码表机台';
     tr.appendChild(tdN);
+
+    // 取数方式：宝点 / 鲸舰 / 纯手工
+    const tdP = el('td');
+    tdP.dataset.label = '取数方式';
+    const sel = el('select', 'input add-panel__sel');
+    [['baodian', '宝点'], ['jingjian', '鲸舰'], ['manual', '纯手工']].forEach(([v, t]) => {
+      const o = el('option', null, t);
+      o.value = v;
+      if ((r.provider || 'baodian') === v) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.setAttribute('aria-label', '取数方式');
+    sel.addEventListener('change', async () => {
+      try {
+        await api('/api/manage/shop/provider', { shop_id: r.id, provider: sel.value });
+        toast('已改为' + sel.options[sel.selectedIndex].text);
+        loadSettings();
+      } catch (e) {
+        toast(String(e.message || e), 'bad');
+        sel.value = r.provider || 'baodian';
+      }
+    });
+    tdP.appendChild(sel);
+    tr.appendChild(tdP);
     const td = el('td');
     const b1 = el('button', 'btn btn--sm', '机台');
     b1.type = 'button';
