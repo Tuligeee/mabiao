@@ -554,6 +554,10 @@ def init_db():
         c.execute("UPDATE units SET kind='pachinko' WHERE team LIKE '%弹珠%' AND "
                   "(kind IS NULL OR kind='pusher')")
         rcols = [r["name"] for r in c.execute("PRAGMA table_info(readings)")]
+        if "unit_snap" not in rcols:
+            c.execute("ALTER TABLE readings ADD COLUMN unit_snap TEXT")
+        if "per_coin_snap" not in rcols:
+            c.execute("ALTER TABLE readings ADD COLUMN per_coin_snap REAL")
         for col in ("p_tokens", "p_out", "p_cards"):
             if col not in rcols:
                 c.execute("ALTER TABLE readings ADD COLUMN %s REAL" % col)
@@ -958,9 +962,10 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
             row_shop0 = shop_row(shop_id) or {}
             u_brand = brand_of(u)
-            m_unit = brand_unit(u_brand)
-            # 一币几珠优先用品牌上配的，没配再退回门店级（老数据）
-            per_coin = brand_per_coin(u_brand) or row_shop0.get("beads_per_coin")
+            # 以抄数当时的单位/换率为准；没记过（老数据）才看当前品牌设置
+            m_unit = (rd["unit_snap"] if rd and rd["unit_snap"] else brand_unit(u_brand))
+            per_coin = ((rd["per_coin_snap"] if rd and rd["per_coin_snap"] else None)
+                        or brand_per_coin(u_brand) or row_shop0.get("beads_per_coin"))
             if m_unit == "bead" and per_coin:
                 paid_beads = tin
                 tin_coins = (tin / per_coin) if tin is not None else None
@@ -1062,14 +1067,22 @@ def save_readings(shop_id: str, day: str, items: list) -> dict:
                               "VALUES(?,?,?,?,?,?,?,?)",
                               (ts, shop_id, day, uid, "out_r", old["out_r"], new_out,
                                it.get("reason") or "编辑"))
+            urow = c.execute("SELECT name, brand, kind FROM units WHERE id=?", (uid,)).fetchone()
+            b_key = (urow["brand"] if urow and urow["brand"] else brand_of(dict(urow))) if urow else ""
+            unit_snap = brand_unit(b_key) if (urow and urow["kind"] == "pachinko") else None
+            per_snap = brand_per_coin(b_key) if (urow and urow["kind"] == "pachinko") else None
             c.execute("INSERT INTO readings(shop_id,unit_id,day,in_r,out_r,note,updated_at,"
-                      "p_tokens,p_out,p_cards) VALUES(?,?,?,?,?,?,?,?,?,?) "
+                      "p_tokens,p_out,p_cards,unit_snap,per_coin_snap) "
+                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) "
                       "ON CONFLICT(shop_id,unit_id,day) DO UPDATE SET "
                       "in_r=excluded.in_r, out_r=excluded.out_r, note=excluded.note, "
                       "updated_at=excluded.updated_at, p_tokens=excluded.p_tokens, "
-                      "p_out=excluded.p_out, p_cards=excluded.p_cards",
+                      "p_out=excluded.p_out, p_cards=excluded.p_cards, "
+                      "unit_snap=COALESCE(readings.unit_snap, excluded.unit_snap), "
+                      "per_coin_snap=COALESCE(readings.per_coin_snap, excluded.per_coin_snap)",
                       (shop_id, uid, day, new_in, new_out, it.get("note"), ts,
-                       it.get("p_tokens"), it.get("p_out"), it.get("p_cards")))
+                       it.get("p_tokens"), it.get("p_out"), it.get("p_cards"),
+                       unit_snap, per_snap))
 
             pv = prev_reading(shop_id, uid, day)
             if pv and new_in is not None and new_in < (pv["in_r"] or 0):
@@ -1099,6 +1112,7 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "kind": u.get("kind") or "pusher",
             "brand": brand_of(u) if (u.get("kind") == "pachinko") else None,
             "fields": brand_flags(brand_of(u))["fields"] if (u.get("kind") == "pachinko") else None,
+            "unit": brand_unit(brand_of(u)) if (u.get("kind") == "pachinko") else None,
             "pos": u.get("pos"), "code": u.get("code"),
             "comms": comms, "has_card": any(c in have_card for c in comms),
             "prev_in": pv["in_r"] if pv else None,

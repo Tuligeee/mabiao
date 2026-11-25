@@ -283,8 +283,8 @@ async function loadScan(code, id) {
     if (d.kind === 'pachinko') {
       const flds0 = r.fields || S.pachFields || [];
       const has0 = (k) => flds0.indexOf(k) >= 0;
-      if (has0('in_r')) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in', noop));
-      if (has0('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens', noop));
+      if (has0('in_r')) inputs.appendChild(makeCell(r, 'in_r', r.unit === 'bead' ? '投珠数' : '投币数', 'prev_in', noop));
+      if (has0('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '总出珠', 'prev_tokens', noop));
       if (has0('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total', noop));
       if (has0('p_cards')) inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards', noop));
     } else {
@@ -499,8 +499,8 @@ function renderEntry() {
       const flds = r.fields || S.pachFields || [];
       const has = (k) => flds.indexOf(k) >= 0;
       inputs.dataset.n = String(flds.length);
-      if (has('in_r')) inputs.appendChild(makeCell(r, 'in_r', '投币', 'prev_in'));
-      if (has('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '投珠', 'prev_tokens'));
+      if (has('in_r')) inputs.appendChild(makeCell(r, 'in_r', r.unit === 'bead' ? '投珠数' : '投币数', 'prev_in'));
+      if (has('p_tokens')) inputs.appendChild(makeCell(r, 'p_tokens', '总出珠', 'prev_tokens'));
       if (has('p_out')) inputs.appendChild(makeCell(r, 'p_out', '出珠', 'prev_out_total'));
       if (has('p_cards')) inputs.appendChild(makeCell(r, 'p_cards', '出卡', 'prev_cards'));
     } else {
