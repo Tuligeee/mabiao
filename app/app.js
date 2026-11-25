@@ -724,7 +724,13 @@ function renderRecon() {
     cols.forEach((c) => {
       if (c.key === 'name') {
         const tdName = el('td', 'name');
-        tdName.textContent = c.text(r);
+        const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
+        if (nm2) {
+          tdName.appendChild(document.createTextNode(nm2[1]));
+          tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
+        } else {
+          tdName.textContent = r.name;
+        }
         tr.appendChild(tdName);
         return;
       }
@@ -770,7 +776,10 @@ function renderRecon() {
 }
 
 // 核对表的列定义：页面和导出共用这一份，避免两边各写一套导致文件对不上页面
-function reconColumns(rows, pach) {
+// mode='page' 页面（推币机只留 卡头收币/码表收币/误差/状态/原因）
+// mode='file' 导出（多带 卡头ID 和 上/下币，明细能复盘）
+function reconColumns(rows, pach, mode = 'page') {
+  const file = mode === 'file';
   const uni = {};
   (rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
   const hasF = (k) => !!uni[k];
@@ -779,14 +788,18 @@ function reconColumns(rows, pach) {
   const cols = [
     {
       key: 'name', label: '机台',
-      // 机台名后面那串通讯ID已经单独成列，这里只留名字
-      text: (r) => String(r.name || '').replace(/\s+\d{5,}$/, ''),
-    },
-    {
-      key: 'comms', label: '卡头ID', cls: 'comm',
-      text: (r) => ((r.comms && r.comms.length) ? r.comms.join(' / ') : null),
+      // 导出的机台名不带尾部通讯ID（卡头ID 单独一列）；页面沿用 名字+ID 的写法
+      text: file
+        ? (r) => String(r.name || '').replace(/\s+\d{5,}$/, '')
+        : (r) => r.name,
     },
   ];
+  if (file) {
+    cols.push({
+      key: 'comms', label: '卡头ID', cls: 'comm',
+      text: (r) => ((r.comms && r.comms.length) ? r.comms.join(' / ') : null),
+    });
+  }
   if (pach) {
     if (hasF('in_r')) {
       cols.push({ key: 'meter_in', label: '码表投币', cls: 'num', text: (r) => num(r.meter_in) });
@@ -810,11 +823,15 @@ function reconColumns(rows, pach) {
       bad: (r) => r.diff !== null && Math.abs(r.diff) >= 1,
     });
   } else {
-    cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
-    cols.push({ key: 'down', label: '卡头下币', cls: 'num', text: (r) => num(r.down) });
+    if (file) {
+      cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
+      cols.push({ key: 'down', label: '卡头下币', cls: 'num', text: (r) => num(r.down) });
+    }
     cols.push({ key: 'head', label: '卡头收币', cls: 'num', text: (r) => num(r.head) });
-    cols.push({ key: 'meter_in', label: '码表上币', cls: 'num', text: (r) => num(r.meter_in) });
-    cols.push({ key: 'meter_out', label: '码表下币', cls: 'num', text: (r) => num(r.meter_out) });
+    if (file) {
+      cols.push({ key: 'meter_in', label: '码表上币', cls: 'num', text: (r) => num(r.meter_in) });
+      cols.push({ key: 'meter_out', label: '码表下币', cls: 'num', text: (r) => num(r.meter_out) });
+    }
     cols.push({ key: 'meter', label: '码表收币', cls: 'num', text: (r) => num(r.meter) });
     cols.push({
       key: 'diff', label: '误差', cls: 'num lead', text: (r) => num(r.diff),
@@ -1017,9 +1034,9 @@ async function doExport(fromDay, toDay) {
   toast('已导出 ' + d.rows.length + ' 行');
 }
 
-// 导出内容和核对页共用同一份列定义：列名、取值、四舍五入都一致
+// 导出内容用核对页同一份列定义（导出模式多带卡头ID 与上/下币），列名和取整不会两边走样
 function buildReconCsv(d, pach) {
-  const cols = reconColumns(d.rows, pach);
+  const cols = reconColumns(d.rows, pach, 'file');
   const head = ['日期'].concat(cols.map((c) => c.label));
   const cell = (v) => {
     if (v === null || v === undefined) return '';
