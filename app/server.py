@@ -1469,8 +1469,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, save_readings(b["shop_id"], b["day"], b.get("items") or []))
             if p == "/api/fetch":
                 sid, day = b["shop_id"], b["day"]
-                devices = baodian(sid).fetch_up(shop_of(shop_row(sid)), day)
-                sync_units(sid, devices)
+                prov = (shop_row(sid) or {}).get("provider") or "baodian"
+                if prov == "manual":
+                    # 纯手工店没有卡头，不需要跟任何系统取数
+                    return self._send(200, {"ok": True, "provider": "manual",
+                                            "skipped": "纯手工门店，不用取数"})
+                if prov != "jingjian":
+                    devices = baodian(sid).fetch_up(shop_of(shop_row(sid)), day)
+                    sync_units(sid, devices)
                 r = fetch_day(sid, day)
                 return self._send(200, {"ok": True, **r})
             if p == "/api/backfill":
@@ -1576,7 +1582,8 @@ def sync_all_shops() -> dict:
 def shops_with_units() -> list:
     with conn() as c:
         rs = [dict(r) for r in c.execute(
-            "SELECT s.id, s.name, COUNT(u.id) AS units FROM shops s "
+            "SELECT s.id, s.name, COALESCE(s.provider,'baodian') AS provider, "
+            "COUNT(u.id) AS units FROM shops s "
             "LEFT JOIN units u ON u.shop_id = s.id AND u.active = 1 "
             "WHERE COALESCE(s.group_name,'') NOT IN (%s) "
             "GROUP BY s.id ORDER BY s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
@@ -1931,7 +1938,8 @@ def api_me() -> dict:
     shop = None
     if own:
         with conn() as c:
-            r = c.execute("SELECT id,name FROM shops WHERE id=?", (own,)).fetchone()
+            r = c.execute("SELECT id,name,COALESCE(provider,'baodian') AS provider "
+                          "FROM shops WHERE id=?", (own,)).fetchone()
             shop = dict(r) if r else None
     return {
         "type": a.get("type"),

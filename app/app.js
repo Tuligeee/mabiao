@@ -616,6 +616,7 @@ function refreshNote() {
 
 async function saveAndFetch() {
   const btn = $('btnSave');
+  btn.textContent = S.provider === 'manual' ? '保存' : '取数';
   const items = S.entry
     .filter((r) => r.in_r !== null || r.out_r !== null || r.p_tokens !== null
       || r.p_out !== null || r.p_cards !== null)
@@ -630,7 +631,13 @@ async function saveAndFetch() {
   $('saveHint').textContent = '保存中';
   try {
     const res = await api('/api/entry', { shop_id: S.shopId, day: S.day, items });
-    $('saveHint').textContent = '已存 ' + res.saved + ' 台，正在拉宝点';
+    if (S.provider === 'manual') {
+      $('saveHint').textContent = '已保存 ' + res.saved + ' 台';
+      toast('已保存');
+      setView('recon');
+      return;
+    }
+    $('saveHint').textContent = '已存 ' + res.saved + ' 台，正在取数';
     await api('/api/fetch', { shop_id: S.shopId, day: S.day });
     $('saveHint').textContent = '已取数';
     toast('已取数');
@@ -2031,6 +2038,7 @@ async function boot() {
   const b = await api('/api/bootstrap');
   S.shopId = b.shop_id;
   S.shops = b.shops;
+  S.provider = ((b.shops || []).find((x) => x.id === S.shopId) || {}).provider || 'baodian';
   S.units = b.units;
   S.bdOk = b.baodian_ok;
   S.day = b.edit_day || b.today;
@@ -2064,6 +2072,7 @@ async function boot() {
     },
     onPick: async (it) => {
       S.shopId = it.value;
+      S.provider = ((S.shops || []).find((x) => x.id === S.shopId) || {}).provider || 'baodian';
       shopPicker.set(it.label);
       await api('/api/shops', { name: it.label }).catch(() => {});
       const bb = await api('/api/bootstrap');
