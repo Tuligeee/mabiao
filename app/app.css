@@ -290,6 +290,14 @@ body {
 }
 
 .lrow__inputs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+
+/* 每台机的拍照凭证：缩略图 + 拍照/重拍 */
+.pic { display: flex; align-items: center; gap: var(--space-2); margin-block-start: var(--space-2); }
+.pic__img {
+  inline-size: 44px; block-size: 44px; object-fit: cover;
+  border-radius: var(--radius-sm); border: 1px solid var(--line);
+}
+.pic__btn { font-size: var(--text-xs); block-size: 32px; padding-inline: var(--space-3); }
 .cell {
   display: grid; grid-template-columns: auto 1fr; align-items: center;
   column-gap: var(--space-2); row-gap: var(--space-0.5); min-inline-size: 0;

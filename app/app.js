@@ -288,6 +288,7 @@ async function loadScan(code, id) {
       inputs.appendChild(makeCell(r, 'out_r', '出', 'prev_out', noop));
     }
     card.appendChild(inputs);
+    card.appendChild(photoBox(r, d.shop.id, d.day));
     wrap.appendChild(card);
   });
 
@@ -320,6 +321,8 @@ async function saveScan(btn) {
       p_tokens: r.p_tokens, p_out: r.p_out, p_cards: r.p_cards,
     }));
   if (!items.length) { toast('还没填数', 'bad'); return; }
+  const miss = firstMissingPhoto(S.scan.rows.filter(hasReading));
+  if (miss) { toast('先给这台拍张照片', 'bad'); return; }
   btn.disabled = true;
   try {
     await api('/api/entry', { shop_id: S.scan.shop.id, day: S.scan.day, items });
@@ -504,6 +507,7 @@ function renderEntry() {
       inputs.appendChild(makeCell(r, 'out_r', '出', 'prev_out'));
     }
     li.appendChild(inputs);
+    li.appendChild(photoBox(r, S.shopId, S.day));
 
     ul.appendChild(li);
   });
@@ -545,9 +549,12 @@ function updateProgress() {
     t.dataset.on = i < filled ? 'true' : 'false';
   });
   $('btnSave').disabled = filled === 0;
+  const lacking = S.entry.filter((r) => hasReading(r) && !r.photo).length;
   $('saveHint').textContent = filled === 0
     ? '先填至少一台'
-    : (filled === total ? '都填完了' : '还剩 ' + (total - filled) + ' 台');
+    : (lacking
+      ? '还差 ' + lacking + ' 张照片'
+      : (filled === total ? '都填完了' : '还剩 ' + (total - filled) + ' 台'));
   $('btnToRecon').hidden = filled < total || total === 0;
 }
 
@@ -600,6 +607,123 @@ function makeCell(row, field, label, prevField, onChange) {
   return cell;
 }
 
+/* ------------------------------------------------------------ 拍照凭证 */
+const PHOTO_MAX_SIDE = 1400;
+const PHOTO_QUALITY = 0.72;
+
+function hasReading(r) {
+  return r.in_r !== null || r.out_r !== null || r.p_tokens !== null
+    || r.p_out !== null || r.p_cards !== null;
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob((b) => (b
+        ? resolve({ blob: b, w: cv.width, h: cv.height })
+        : reject(new Error('压缩失败，重拍一张'))), 'image/jpeg', PHOTO_QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('这张图读不了，重拍一张')); };
+    img.src = url;
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(new Error('读不到照片'));
+    fr.readAsDataURL(blob);
+  });
+}
+
+// 照片带登录态取回来（<img src> 带不了 Authorization）
+async function loadPhoto(id) {
+  S.photoUrls = S.photoUrls || {};
+  if (S.photoUrls[id]) return S.photoUrls[id];
+  const tok = getToken();
+  const r = await fetch(BASE + 'api/photo?id=' + encodeURIComponent(id),
+    { headers: tok ? { Authorization: 'Bearer ' + tok } : {} });
+  if (!r.ok) return null;
+  const url = URL.createObjectURL(await r.blob());
+  S.photoUrls[id] = url;
+  return url;
+}
+
+async function uploadPhoto(shopId, day, row, file) {
+  const { blob, w, h } = await compressImage(file);
+  const data = await blobToBase64(blob);
+  const d = await api('/api/photo', {
+    shop_id: shopId, day, unit_id: row.unit_id, data, w, h,
+  });
+  row.photo = d.id;
+  const url = URL.createObjectURL(blob);
+  S.photoUrls = S.photoUrls || {};
+  S.photoUrls[d.id] = url;
+  return { url, bytes: d.bytes };
+}
+
+function photoBox(row, shopId, day) {
+  const box = el('div', 'pic');
+  const img = el('img', 'pic__img');
+  img.alt = row.name + ' 的码表照片';
+  img.hidden = true;
+  img.loading = 'lazy';
+  const btn = el('button', 'btn btn--quiet pic__btn', row.photo ? '重拍' : '拍照');
+  btn.type = 'button';
+
+  const file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/*';
+  file.capture = 'environment';     // 只让拍照，不从相册挑
+  file.hidden = true;
+
+  const show = (url) => {
+    if (!url) return;
+    img.src = url;
+    img.hidden = false;
+    box.dataset.has = 'true';
+    btn.textContent = '重拍';
+  };
+  if (row.photo) loadPhoto(row.photo).then(show).catch(() => {});
+
+  btn.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const f = file.files && file.files[0];
+    file.value = '';
+    if (!f) return;
+    btn.disabled = true;
+    btn.textContent = '上传中';
+    try {
+      const out = await uploadPhoto(shopId, day, row, f);
+      show(out.url);
+      toast('照片已存');
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+      btn.textContent = row.photo ? '重拍' : '拍照';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  box.appendChild(img);
+  box.appendChild(btn);
+  box.appendChild(file);
+  return box;
+}
+
+function firstMissingPhoto(rows) {
+  return rows.find((r) => hasReading(r) && !r.photo) || null;
+}
+
 function refreshNote() {
   const bad = S.entry.filter((r) => (r.in_r !== null && r.prev_in !== null && r.in_r < r.prev_in)
     || (r.out_r !== null && r.prev_out !== null && r.out_r < r.prev_out));
@@ -621,6 +745,12 @@ async function saveAndFetch() {
       p_tokens: r.p_tokens, p_out: r.p_out, p_cards: r.p_cards,
     }));
   if (!items.length) { toast('还没填读数', 'bad'); return; }
+  const miss = firstMissingPhoto(S.entry.filter(hasReading));
+  if (miss) {
+    toast(miss.name + ' 还没拍照', 'bad');
+    focusUnit(miss.unit_id);
+    return;
+  }
 
   btn.dataset.loading = 'true';
   btn.disabled = true;

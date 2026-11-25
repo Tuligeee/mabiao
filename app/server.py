@@ -524,6 +524,10 @@ CREATE TABLE IF NOT EXISTS card_daily(
   shop_id TEXT, day TEXT, comm_id TEXT, up_native REAL, up_give REAL,
   up_a REAL, up_b REAL, down_qty REAL, fetched_at TEXT,
   PRIMARY KEY(shop_id, day, comm_id));
+-- 码表照片：店长抄表时拍的凭证，只留 45 天
+CREATE TABLE IF NOT EXISTS photos(
+  id TEXT PRIMARY KEY, shop_id TEXT, unit_id INTEGER, day TEXT,
+  path TEXT, bytes INTEGER, w INTEGER, h INTEGER, at TEXT, by TEXT);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 """
 
@@ -1170,6 +1174,9 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
         have_card = {r["comm_id"] for r in
                      c.execute("SELECT comm_id FROM card_daily WHERE shop_id=? AND day=?",
                                (shop_id, day))}
+        pics = {r["unit_id"]: dict(r) for r in
+                c.execute("SELECT id, unit_id, at FROM photos WHERE shop_id=? AND day=?",
+                          (shop_id, day))}
     rows = []
     for u in units:
         rd = reads.get(u["id"])
@@ -1196,10 +1203,105 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "prev_out_total": pv["p_out"] if pv else None,
             "prev_cards": pv["p_cards"] if pv else None,
             "note": rd["note"] if rd else None,
+            "photo": (pics.get(u["id"]) or {}).get("id"),
+            "photo_at": (pics.get(u["id"]) or {}).get("at"),
         })
     return {"day": day, "rows": rows,
             "confirmed": bool(shop.get("units_confirmed")),
             "confirmed_at": shop.get("units_confirmed")}
+
+
+# ---------------------------------------------------------------- 码表照片
+PHOTO_DIR = DATA / "photos"
+PHOTO_KEEP_DAYS = 45          # 一个半月
+PHOTO_MAX_BYTES = 3 * 1024 * 1024
+
+
+def photo_expire_day(today: str | None = None) -> str:
+    d = date.fromisoformat(today) if today else date.today()
+    return (d - timedelta(days=PHOTO_KEEP_DAYS)).isoformat()
+
+
+def cleanup_photos() -> int:
+    """删掉超过 45 天的照片（文件 + 记录），返回删了几张。"""
+    cut = photo_expire_day()
+    n = 0
+    with conn() as c:
+        old = [dict(r) for r in c.execute("SELECT id, path FROM photos WHERE day < ?", (cut,))]
+        for r in old:
+            try:
+                (PHOTO_DIR / r["path"]).unlink()
+            except OSError:
+                pass
+            c.execute("DELETE FROM photos WHERE id=?", (r["id"],))
+            n += 1
+    # 顺手清掉空目录
+    try:
+        for d in PHOTO_DIR.iterdir():
+            if d.is_dir() and not any(d.iterdir()):
+                d.rmdir()
+    except OSError:
+        pass
+    return n
+
+
+def save_photo(shop_id: str, unit_id: int, day: str, data_b64: str,
+               w=None, h=None) -> dict:
+    import base64
+    sid = guard_shop(shop_id)
+    with conn() as c:
+        u = c.execute("SELECT id, shop_id, code FROM units WHERE id=?", (unit_id,)).fetchone()
+    if not u or u["shop_id"] != sid:
+        raise RuntimeError("机台不属于这家门店")
+    try:
+        raw = base64.b64decode(data_b64 or "", validate=False)
+    except Exception:
+        raise RuntimeError("照片数据坏了，重拍一张")
+    if len(raw) < 1024:
+        raise RuntimeError("照片太小，重拍一张")
+    if len(raw) > PHOTO_MAX_BYTES:
+        raise RuntimeError("照片太大，重拍一张")
+    if raw[:2] != b"\xff\xd8":
+        raise RuntimeError("只收 JPG")
+
+    pid = uuid.uuid4().hex
+    rel = "%s/%s_%s.jpg" % (day, u["code"] or u["id"], pid[:8])
+    p = PHOTO_DIR / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(raw)
+
+    ts = now()
+    with conn() as c:
+        # 同一天同一台只留一张，重拍就替换
+        for o in [dict(r) for r in c.execute(
+                "SELECT id, path FROM photos WHERE shop_id=? AND unit_id=? AND day=?",
+                (sid, unit_id, day))]:
+            try:
+                (PHOTO_DIR / o["path"]).unlink()
+            except OSError:
+                pass
+            c.execute("DELETE FROM photos WHERE id=?", (o["id"],))
+        c.execute("INSERT INTO photos(id,shop_id,unit_id,day,path,bytes,w,h,at,by) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  (pid, sid, unit_id, day, rel, len(raw), w, h, ts,
+                   (actor() or {}).get("name") or "?"))
+        c.execute("INSERT INTO audit(ts,shop_id,day,unit_id,field,old_v,new_v,note) "
+                  "VALUES(?,?,?,?,?,?,?,?)",
+                  (ts, sid, day, unit_id, "photo", None, len(raw), "上传码表照片"))
+    cleanup_photos()
+    return {"id": pid, "bytes": len(raw)}
+
+
+def photo_bytes(photo_id: str) -> bytes:
+    with conn() as c:
+        r = c.execute("SELECT * FROM photos WHERE id=?", (photo_id,)).fetchone()
+    if not r:
+        raise RuntimeError("照片不存在，可能已经过期清理")
+    guard_shop(r["shop_id"])
+    p = PHOTO_DIR / r["path"]
+    if not p.is_file():
+        raise RuntimeError("照片文件已经清理")
+    return p.read_bytes()
 
 
 def dates_with_data(shop_id: str) -> list:
@@ -1421,6 +1523,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_bootstrap())
             if p == "/api/entry":
                 return self._send(200, api_entry(q))
+            if p == "/api/photo":
+                return self._send(200, photo_bytes((q.get("id") or [""])[0]), "image/jpeg")
             if p == "/api/bd/status":
                 return self._send(200, api_bd_status(q))
             if p == "/api/manage/devices":
@@ -1486,6 +1590,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_recon_note(b))
             if p == "/api/entry":
                 return self._send(200, save_readings(b["shop_id"], b["day"], b.get("items") or []))
+            if p == "/api/photo":
+                return self._send(200, save_photo(b["shop_id"], int(b["unit_id"]), b["day"],
+                                                  b.get("data") or "", b.get("w"), b.get("h")))
             if p == "/api/fetch":
                 sid, day = b["shop_id"], b["day"]
                 prov = (shop_row(sid) or {}).get("provider") or "baodian"
@@ -2719,6 +2826,12 @@ def api_audit(q):
 def main():
     port = int(os.environ.get("PORT") or 8765)
     init_db()
+    try:
+        n = cleanup_photos()
+        if n:
+            print(f"清理过期照片 {n} 张")
+    except Exception as e:
+        print("清理照片失败：", e)
     host = os.environ.get("METER_HOST", "0.0.0.0")
     srv = ThreadingHTTPServer((host, port), Handler)
     print(f"码表核对 · http://127.0.0.1:{port}")
