@@ -66,13 +66,9 @@ function syncDayLock() {
   const store = S.role === 'store';
   // 门店：日期只在核对页出现（填写页固定昨天，不需要选）
   // 总部：填写 / 核对 / 全链都能切日期
-  const show = store ? S.view === 'recon'
+  const show = store ? ['entry', 'recon'].indexOf(S.view) >= 0
     : ['entry', 'recon', 'overview'].indexOf(S.view) >= 0;
   wrap.hidden = !show;
-  if (store && S.view === 'entry' && S.editDay && S.day !== S.editDay) {
-    S.day = S.editDay;
-    if (dayPicker) dayPicker.set(S.editDay);
-  }
 }
 
 function setView(v) {
@@ -2086,6 +2082,7 @@ async function boot() {
   S.shopId = b.shop_id;
   S.shops = b.shops;
   S.provider = ((b.shops || []).find((x) => x.id === S.shopId) || {}).provider || 'baodian';
+  S.maxDay = b.max_day || S.editDay;
   S.units = b.units;
   S.bdOk = b.baodian_ok;
   S.day = b.edit_day || b.today;
@@ -2137,7 +2134,7 @@ async function boot() {
     pop: $('dayPop'),
     valueEl: $('dayVal'),
     value: S.day,
-    max: S.editDay,
+    max: S.maxDay || S.editDay,
     onChange: async (v) => {
       S.day = v;
       if (S.view === 'entry') await loadEntry();

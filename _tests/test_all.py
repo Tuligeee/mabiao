@@ -482,9 +482,12 @@ def t_store_can_edit():
     uid = mk_unit(sid, "亥弹珠机-001", brand="亥")
     S.ACTOR.me = {"id": "ST03", "name": "测试店-可编辑", "type": "store", "shop": sid}
     try:
-        today = S.edit_day()
-        eq(S.can_edit(today), True, "昨天可以填")
-        eq(S.can_edit("2020-01-01"), False, "往前不能填")
+        import datetime as _dt
+        today = _dt.date.today().isoformat()
+        yday = S.edit_day()
+        eq(S.can_edit(today), True, "今天可以填（晚上关店当天填）")
+        eq(S.can_edit(yday), True, "昨天可以填")
+        eq(S.can_edit("2020-01-01"), False, "前天及更早不能填")
         try:
             S.save_readings(sid, "2020-01-01", [{"unit_id": uid, "in_r": 1}])
             eq(True, False, "门店填老日期应被拒")
@@ -575,7 +578,7 @@ CASES = [
     ("二维码输出 PNG", t_qr),
     ("录入接口返回机台行", t_entry_payload),
     ("核对汇总台数正确", t_summary_counts),
-    ("门店只能填昨天", t_store_can_edit),
+    ("门店可填今天和昨天", t_store_can_edit),
     ("宝点门店仍走宝点", t_baodian_routing),
     ("区间核对覆盖每一天", t_recon_range),
 ]

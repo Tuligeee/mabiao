@@ -863,10 +863,16 @@ def edit_day() -> str:
     return (date.today() - timedelta(days=1)).isoformat()
 
 
+def editable_days() -> tuple:
+    """门店能改的日期：今天 + 昨天（有些店晚上 10 点关门当天就填）。"""
+    t = date.today()
+    return (t.isoformat(), (t - timedelta(days=1)).isoformat())
+
+
 def can_edit(day: str) -> bool:
     if not is_store():
         return True
-    return day == edit_day()
+    return day in editable_days()
 
 
 def recon_note(shop_id: str, day: str, unit_id: int, reason: str, note: str) -> dict:
@@ -1102,7 +1108,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
 def save_readings(shop_id: str, day: str, items: list) -> dict:
     """items: [{unit_id, in_r, out_r, note}] → 保存 + 留痕 + 返回读数下降告警"""
     if not can_edit(day):
-        raise RuntimeError("门店只能填 %s 的码表，%s 已经锁了" % (edit_day(), day))
+        raise RuntimeError("门店只能填今天和昨天的码表，%s 不能改了" % day)
     warns = []
     ts = now()
     with conn() as c:
@@ -2246,6 +2252,7 @@ def api_bootstrap():
         "baodian_ok": bd_ok,
         "baodian_msg": bd_msg,
         "today": date.today().isoformat(),
+        "max_day": date.today().isoformat(),
         "edit_day": edit_day(),
         "scope_class": SCOPE_CLASS,
         "rate": RATE,
@@ -2596,6 +2603,7 @@ def api_entry(q):
     out = entry_view(sid, day, kind)
     out["can_edit"] = can_edit(day)
     out["edit_day"] = edit_day()
+    out["max_day"] = date.today().isoformat()
     return out
 
 
