@@ -882,7 +882,9 @@ def recon_note(shop_id: str, day: str, unit_id: int, reason: str, note: str) -> 
 def prev_reading(shop_id: str, unit_id: int, day: str):
     with conn() as c:
         r = c.execute("SELECT day,in_r,out_r,p_tokens,p_out,p_cards FROM readings "
-                      "WHERE shop_id=? AND unit_id=? AND day<? AND in_r IS NOT NULL "
+                      "WHERE shop_id=? AND unit_id=? AND day<? "
+                      "AND (in_r IS NOT NULL OR out_r IS NOT NULL OR p_tokens IS NOT NULL "
+                      "     OR p_out IS NOT NULL OR p_cards IS NOT NULL) "
                       "ORDER BY day DESC LIMIT 1",
                       (shop_id, unit_id, day)).fetchone()
     return dict(r) if r else None
@@ -987,25 +989,23 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         reset = (u["id"] in resets)
 
         is_p = (u.get("kind") == "pachinko")
-        tin = tout = None
-        if rd and reset:
-            tin = rd["in_r"] or 0
-            tout = rd["out_r"] or 0
-        elif rd and pv:
-            tin = (rd["in_r"] or 0) - (pv["in_r"] or 0)
-            tout = (rd["out_r"] or 0) - (pv["out_r"] or 0)
+        def delta(field):
+            if not rd:
+                return None
+            if reset:
+                return rd[field] or 0
+            if not pv or rd[field] is None or pv[field] is None:
+                return None
+            return (rd[field] or 0) - (pv[field] or 0)
+
+        tin = delta("in_r")
+        tout = delta("out_r")
 
         p_metrics = None
         if is_p:
-            d_tokens = d_out = d_cards = None
-            if rd and reset:
-                d_tokens = rd["p_tokens"] or 0
-                d_out = rd["p_out"] or 0
-                d_cards = rd["p_cards"] or 0
-            elif rd and pv:
-                d_tokens = (rd["p_tokens"] or 0) - (pv["p_tokens"] or 0)
-                d_out = (rd["p_out"] or 0) - (pv["p_out"] or 0)
-                d_cards = (rd["p_cards"] or 0) - (pv["p_cards"] or 0)
+            d_tokens = delta("p_tokens")
+            d_out = delta("p_out")
+            d_cards = delta("p_cards")
             # 码表的「投币」数有两种记法：
             #   记币 → 投币出珠 = 投币数 × 一币几珠，和宝点上币直接比
             #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比

@@ -715,7 +715,8 @@ function renderRecon() {
   (d.rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
   const hasF = (k) => !!uni[k];
   const cols = pach
-    ? [['机台', ''], ['码表投币', 'num'], ['卡头上币', 'num']]
+    ? [['机台', '']]
+      .concat(hasF('in_r') ? [['码表投币', 'num'], ['卡头上币', 'num']] : [])
       .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
       .concat(hasF('p_out') ? [['出珠', 'num']] : [])
       .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
@@ -749,13 +750,15 @@ function renderRecon() {
     if (pach) {
       const pm = r.p || {};
       const val = (v) => (v === null || v === undefined ? '-' : fmt(v));
-      tr.appendChild(el('td', 'num', val(r.meter_in)));
-      tr.appendChild(el('td', 'num', val(r.up)));
+      if (hasF('in_r')) {
+        tr.appendChild(el('td', 'num', val(r.meter_in)));
+        tr.appendChild(el('td', 'num', val(r.up)));
+      }
       if (hasF('p_tokens')) tr.appendChild(el('td', 'num', val(pm.tokens)));
       if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
       if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
-      // 中奖出珠 = 出珠 − 投币折成的珠
-      tr.appendChild(el('td', 'num', val(pm.win)));
+      // 中奖出珠 = 出珠 − 投币折成的珠（没有出珠的玩法不显示）
+      if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.win)));
       const td = el('td', 'num lead', val(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
       tr.appendChild(td);
