@@ -720,7 +720,7 @@ function renderRecon() {
       .concat(hasF('p_tokens') ? [['码表投珠', 'num']] : [])
       .concat(hasF('p_out') ? [['出珠', 'num']] : [])
       .concat(hasF('p_cards') ? [['出卡', 'num']] : [])
-      .concat(hasF('p_out') ? [['中奖出珠', 'num']] : [])
+      .concat(hasF('p_out') && hasF('in_r') ? [['中奖出珠', 'num']] : [])
       .concat([['收币误差', 'num'], ['状态', ''], ['原因', '']])
     : [['机台', ''], ['上币', 'num'], ['下币', 'num'], ['码表收币', 'num'],
        ['误差', 'num'], ['状态', ''], ['原因', '']];
@@ -758,7 +758,7 @@ function renderRecon() {
       if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.out)));
       if (hasF('p_cards')) tr.appendChild(el('td', 'num', val(pm.cards)));
       // 中奖出珠 = 出珠 − 投币折成的珠（没有出珠的玩法不显示）
-      if (hasF('p_out')) tr.appendChild(el('td', 'num', val(pm.win)));
+      if (hasF('p_out') && hasF('in_r')) tr.appendChild(el('td', 'num', val(pm.win)));
       const td = el('td', 'num lead', val(r.diff));
       if (r.diff !== null && Math.abs(r.diff) >= 1) td.dataset.tone = 'bad';
       tr.appendChild(td);

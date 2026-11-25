@@ -1957,6 +1957,7 @@ PACHINKO_MODES = [
     ("swipe_bead_card", "刷卡出珠出卡", ["in_r", "p_tokens", "p_out", "p_cards"]),
     ("swipe_card", "刷卡出卡", ["in_r", "p_cards"]),
     ("bead_card", "投珠出卡", ["p_tokens", "p_cards"]),
+    ("bead_out_card", "投珠出珠出卡", ["p_tokens", "p_out", "p_cards"]),
 ]
 MODE_FIELDS = {k: v for k, _, v in PACHINKO_MODES}
 DEFAULT_MODE = "swipe_bead_card"
