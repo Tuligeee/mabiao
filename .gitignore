@@ -54,3 +54,7 @@ _preview/
 _tmp/
 _tests/_rundir/
 
+
+# 服务器代码快照（临时比对用，不进仓库）
+_tests/stg_server.py
+_tests/prod_server.py
