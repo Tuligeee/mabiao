@@ -467,7 +467,11 @@ async function loadHome() {
 
 /* ------------------------------------------------------------ 录入 */
 async function loadEntry() {
-  if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
+  // 门店可以填今天和昨天，选哪天就填哪天；只有日期不可用时才退回昨天
+  if (S.role === 'store' && S.editDay && (!S.day || S.day < S.editDay || S.day > S.today)) {
+    S.day = S.editDay;
+    if (dayPicker) dayPicker.set(S.day);
+  }
   refreshBdState();
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
   S.allRows = groupByName(d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length })),
@@ -2810,7 +2814,7 @@ async function mergeMachine(g) {
 
 /* ------------------------------------------------------------ 启动 */
 let shopPicker = null;
-let dayPicker = null;
+var dayPicker = null;   // var 是为了让 loadEntry 在初始化前调用时能安全判空
 
 function showGate(msg) {
   $('gate').hidden = false;
