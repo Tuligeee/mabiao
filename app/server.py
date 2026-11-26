@@ -1354,6 +1354,9 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day)
         comms = [str(x["comm_id"]) for x in u["comms"]]
+        # 卡头清单：P 位取 comms.console_no（units.pos 是老字段，拆完都还是 1）
+        pcomms = [{"p": (x.get("console_no") or "").strip(), "comm": str(x["comm_id"])}
+                  for x in u["comms"] if x.get("comm_id")]
         rows.append({
             "unit_id": u["id"], "name": u["name"], "team": u["team"], "shared": bool(u["shared"]),
             "active": bool(u["active"]),
@@ -1362,7 +1365,7 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "fields": brand_flags(brand_of(u))["fields"] if (u.get("kind") == "pachinko") else None,
             "unit": brand_unit(brand_of(u)) if (u.get("kind") == "pachinko") else None,
             "pos": u.get("pos"), "code": u.get("code"),
-            "comms": comms,
+            "comms": comms, "pcomms": pcomms,
             "has_card": (any(c in have_card or c in have_machine for c in comms)
                          or (u["name"] or "").strip() in have_machine),
             "prev_in": pv["in_r"] if pv else None,
@@ -2105,7 +2108,9 @@ BD_PUSHER_TEAMS = ("中岛推币类", "其他推币机", "屏幕机", "屏幕类
                    "连排推币机", "连排推币类", "推币机")
 # 宝点的项目分组名改过几次（屏幕机→屏幕类、连排推币机→连排推币类），
 # 只认白名单会漏机台，所以再按关键词兜一层（2026-11-26 杭州店整批推币机被漏掉）
-TEAM_KIND_KW = (("弹珠", "pachinko"), ("推币", "pusher"), ("屏幕", "pusher"))
+# 关键词兜底：只认「弹珠」「推币」。
+# 「屏幕」不能做关键词——儿童屏幕类属于彩票机类，会误判成推币机（2026-11-26 杭州店）
+TEAM_KIND_KW = (("弹珠", "pachinko"), ("推币", "pusher"))
 
 
 def _bd_team(raw) -> str:

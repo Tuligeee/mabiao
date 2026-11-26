@@ -470,7 +470,7 @@ async function loadEntry() {
   if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
   refreshBdState();
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
-  S.allRows = d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length }));
+  S.allRows = groupByName(d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length })));
   S.confirmed = !!d.confirmed;
   S.entry = S.allRows.filter((r) => r.active !== false);
 
@@ -554,6 +554,25 @@ async function confirmUnits() {
   }
 }
 
+function baseName(n) {
+  // 「冰淇淋嘉年华 (2)」「可乐风暴 733586」都归到同一台机
+  return String(n || '').replace(/\s*\(\d+\)\s*$/, '').replace(/\s+\d{5,}$/, '').trim();
+}
+
+/* 拆开的同名机台排在一起，组内按 P 位；不同机的先后保持原来的顺序 */
+function groupByName(rows) {
+  const order = new Map();
+  rows.forEach((r) => {
+    const b = baseName(r.name);
+    if (!order.has(b)) order.set(b, order.size);
+  });
+  const firstP = (r) => (((r.pcomms || [])[0] || {}).p || '');
+  rows.sort((a, b) => (order.get(baseName(a.name)) - order.get(baseName(b.name)))
+    || String(firstP(a)).localeCompare(String(firstP(b)))
+    || String(a.name).localeCompare(String(b.name)));
+  return rows;
+}
+
 function renderEntry() {
   const ul = $('entryList');
   ul.innerHTML = '';
@@ -563,16 +582,18 @@ function renderEntry() {
     li.dataset.unit = String(r.unit_id);
 
     const id = el('div', 'lrow__id');
-    if (r.pos) id.appendChild(el('span', 'lrow__pos', 'P' + r.pos));
+    // 老命名「可乐风暴 733586」：名字和通讯ID分开显示
     const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-    if (nm) {
-      id.appendChild(el('span', 'lrow__name', nm[1]));
+    id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
+    // 卡头：P 位取 comms.console_no，拆开后靠这个认出是哪一块表
+    const pc = (r.pcomms || []).filter((x) => x && x.comm);
+    if (pc.length) {
+      pc.forEach((x) => id.appendChild(el('span', 'lrow__comm', (x.p || '未标') + '：' + x.comm)));
+    } else if (nm) {
       id.appendChild(el('span', 'lrow__comm', nm[2]));
-    } else {
-      id.appendChild(el('span', 'lrow__name', r.name));
     }
-    if (r.shared || r.comm_count > 1) {
-      id.appendChild(el('span', 'lrow__meta', r.shared ? '共用码表' : r.comm_count + ' 个卡头'));
+    if (r.shared || pc.length > 1) {
+      id.appendChild(el('span', 'lrow__meta', r.shared ? '共用码表' : pc.length + ' 个卡头'));
     }
     if (r.prev_in !== null && r.prev_in !== undefined) {
       const pv = (r.kind === 'pachinko')
