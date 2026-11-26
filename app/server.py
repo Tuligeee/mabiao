@@ -1860,7 +1860,7 @@ def shops_with_units() -> list:
             "SELECT s.id, s.name, COALESCE(s.provider,'baodian') AS provider, "
             "s.jj_base, s.jj_shop_id, COUNT(u.id) AS units FROM shops s "
             "LEFT JOIN units u ON u.shop_id = s.id AND u.active = 1 "
-            "WHERE COALESCE(s.group_name,'') NOT IN (%s) "
+            "WHERE COALESCE(s.group_name,'') NOT IN (%s) OR u.id IS NOT NULL "
             "GROUP BY s.id ORDER BY s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
             tuple(HIDDEN_GROUPS))]
     return rs
@@ -1974,7 +1974,7 @@ def _machine_groups(shop_id: str) -> list:
             comms.setdefault(r["unit_id"], []).append(str(r["comm_id"]))
     groups: dict[tuple, list] = {}
     for u in units:
-        base = re.sub(r"\s+\d{5,}$", "", u["name"]).strip() or u["name"]
+        base = re.sub(r"\s*\(\d+\)\s*$", "", re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
         u["comms"] = comms.get(u["id"], [])
         groups.setdefault((u["kind"] or "pusher", base), []).append(u)
     out = []
@@ -2705,9 +2705,11 @@ def api_bootstrap():
         except Exception:
             sid = None
     fill_group_names()
+    # 隐藏集团只是不给看空壳店；一旦这家店有了机台，就该出现在列表里
     shops = [dict(r) for r in conn().execute(
-        "SELECT * FROM shops WHERE COALESCE(group_name,'') NOT IN (%s) "
-        "ORDER BY group_name, name" % ",".join("?" * len(HIDDEN_GROUPS)),
+        "SELECT s.* FROM shops s WHERE COALESCE(s.group_name,'') NOT IN (%s) "
+        "OR EXISTS (SELECT 1 FROM units u WHERE u.shop_id=s.id AND u.active=1) "
+        "ORDER BY s.group_name, s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
         tuple(HIDDEN_GROUPS))]
     # 门店身份：只看得见自己这一家
     if is_store():
@@ -2788,7 +2790,7 @@ def manage_machines(shop_id: str) -> list:
     us = [u for u in manage_units(shop_id) if u.get("active")]
     groups: dict[str, list] = {}
     for u in us:
-        base = _re.sub(r"\s+\d{5,}$", "", u["name"]).strip() or u["name"]
+        base = _re.sub(r"\s*\(\d+\)\s*$", "", _re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
         groups.setdefault(base, []).append(u)
     out = []
     for base, units in groups.items():
@@ -3043,7 +3045,7 @@ def split_unit(uid: int) -> dict:
             "SELECT comm_id FROM comms WHERE unit_id=? ORDER BY comm_id", (uid,))]
         if len(comms) < 2:
             raise RuntimeError("只有一个卡头，不用拆")
-        base = _re.sub(r"\s+\d{5,}$", "", u["name"]).strip() or u["name"]
+        base = _re.sub(r"\s*\(\d+\)\s*$", "", _re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
         first = unique_unit_name(c, shop_id, base, skip_id=uid)
         c.execute("UPDATE units SET name=?, shared=0, locked=0 WHERE id=?", (first, uid))
         for cid in comms[1:]:

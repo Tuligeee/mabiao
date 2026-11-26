@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
-<link rel="stylesheet" href="theme.css?v=117">
-<link rel="stylesheet" href="app.css?v=117">
+<link rel="stylesheet" href="theme.css?v=118">
+<link rel="stylesheet" href="app.css?v=118">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
@@ -196,10 +196,6 @@
         </div>
       </div>
 
-      <div class="row" style="margin:var(--space-4) 0">
-        <button class="btn" type="button" id="btnFetchAll">拉取全部门店当天数据</button>
-        <p class="progress" id="jobStatus"></p>
-      </div>
 
       <div class="card card--flush">
       <table class="tbl">
@@ -254,9 +250,9 @@
           <h1 class="h1" id="unitTitle">机台</h1>
           <p class="lede">每台机一个码表。几个卡头共用一块码表时，勾上共用，把它们的通讯ID 都填上。</p>
         </div>
-        <div class="row" style="margin-bottom:var(--space-4)">
+        <div class="setup-acts" style="margin-bottom:var(--space-4)">
           <button class="btn" type="button" id="btnQr">打印机台二维码</button>
-          <p class="progress" id="qrHint">贴到机台上，扫码直达这一台</p>
+          <button class="btn" type="button" id="btnBdSync" hidden>从宝点同步机台</button>
         </div>
 
         <p class="sr-only" id="machineLive" aria-live="polite"></p>
@@ -268,8 +264,8 @@
 </div>
 
 <script src="vendor/jsQR.js"></script>
-  <script src="ui.js?v=117"></script>
-<script src="app.js?v=117"></script>
+  <script src="ui.js?v=118"></script>
+<script src="app.js?v=118"></script>
 </body>
 </html>
 

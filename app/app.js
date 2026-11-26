@@ -1527,19 +1527,6 @@ async function loadOverview() {
   }
 }
 
-async function fetchAll() {
-  const btn = $('btnFetchAll');
-  btn.disabled = true;
-  try {
-    const r = await api('/api/fetch-all', { day: S.day });
-    $('jobStatus').textContent = '开始拉 ' + r.task + ' 家门店';
-    pollJob(() => { btn.disabled = false; loadOverview(); });
-  } catch (e) {
-    btn.disabled = false;
-    toast(String(e.message || e), 'bad');
-  }
-}
-
 function pollJob(done) {
   setTimeout(async () => {
     try {
@@ -1564,6 +1551,7 @@ async function loadSettings() {
   }
 
   MSHOP = null;
+  if ($('btnBdSync')) $('btnBdSync').hidden = true;
   $('shopPane').hidden = false;
   $('unitPane').hidden = true;
 
@@ -1639,15 +1627,153 @@ async function openShop(shop) {
   $('unitPane').hidden = false;
   $('unitTitle').textContent = shop.name;
   $('btnBackShops').hidden = S.role === 'store';
+  if ($('btnBdSync')) $('btnBdSync').hidden = false;
   await renderUnits();
 }
 
 let EDIT_KEY = null;
 
+/* 从宝点同步机台：拉清单 → 勾选 → 写入（名称/类型/卡头/P位 以宝点为准） */
+async function openBdSync(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '拉取中…（约15秒）'; }
+  let d;
+  try {
+    d = await api('/api/manage/bd-sync/preview?shop_id=' + encodeURIComponent(MSHOP.id));
+  } catch (e) {
+    toast(String(e.message || e), 'bad');
+    if (btn) { btn.disabled = false; btn.textContent = '从宝点同步机台'; }
+    return;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '从宝点同步机台'; }
+
+  const rows = d.rows || [];
+  const root = el('div');
+  root.style.cssText = 'position:fixed;inset:0;z-index:80;display:flex;align-items:center;'
+    + 'justify-content:center;background:rgba(0,0,0,.45);padding:16px';
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    document.body.style.overflow = '';
+    root.remove();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  };
+  document.addEventListener('keydown', onKey);
+  document.body.style.overflow = 'hidden';
+  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  const box = el('div');
+  box.style.cssText = 'width:min(980px,96vw);max-height:86vh;overflow:auto;padding:20px;'
+    + 'background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35)';
+  const dlgHead = el('div');
+  dlgHead.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px';
+  const dlgTitle = el('h2', 'dlg__t', '从宝点同步机台');
+  dlgTitle.style.cssText = 'margin:0;font-size:20px;font-weight:600';
+  dlgHead.appendChild(dlgTitle);
+  const xBtn = el('button', 'btn btn--quiet', '×');
+  xBtn.type = 'button';
+  xBtn.setAttribute('aria-label', '关闭');
+  xBtn.style.cssText = 'font-size:20px;line-height:1;padding:2px 10px';
+  xBtn.addEventListener('click', close);
+  dlgHead.appendChild(xBtn);
+  box.appendChild(dlgHead);
+  box.appendChild(el('p', 'dlg__d', '宝点共 ' + d.devices + ' 台要写码表 · P位取到 '
+    + d.pos_have + ' 个卡头（近 ' + d.days + ' 天）· 没勾的不会动'));
+
+  const tbl = el('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+  const thead = el('thead');
+  const htr = el('tr');
+  htr.appendChild(el('th'));
+  ['机台', '类型', '卡头ID', 'P位'].forEach((t) => htr.appendChild(el('th', null, t)));
+  const master = document.createElement('input');
+  master.type = 'checkbox';
+  master.title = '全选 / 全不选';
+  master.setAttribute('aria-label', '全选');
+  htr.firstChild.appendChild(master);
+  thead.appendChild(htr);
+  tbl.appendChild(thead);
+  const tbody = el('tbody');
+  const items = [];
+  rows.forEach((r) => {
+    const tr = el('tr');
+    const td0 = el('td');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = r.status !== 'same';
+    td0.appendChild(cb);
+    items.push({ cb, r });
+    tr.appendChild(td0);
+    tr.appendChild(el('td', null, r.name));
+    tr.appendChild(el('td', null, r.kind === 'pachinko' ? '弹珠机' : '推币机'));
+    tr.appendChild(el('td', 'comm', r.comms.join(' / ')));
+    tr.appendChild(el('td', 'comm', (r.pos || []).filter(Boolean).join(' / ') || '未标'));
+
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  const refreshMaster = () => {
+    const on = items.filter((x) => x.cb.checked).length;
+    master.checked = items.length > 0 && on === items.length;
+    master.indeterminate = on > 0 && on < items.length;
+  };
+  master.addEventListener('change', () => {
+    items.forEach((x) => { x.cb.checked = master.checked; });
+    refreshMaster();
+  });
+  items.forEach((x) => x.cb.addEventListener('change', refreshMaster));
+  refreshMaster();
+  [].forEach.call(tbl.querySelectorAll('th,td'), (c) => {
+    c.style.padding = '7px 8px';
+    c.style.borderBottom = '1px solid #eee';
+    c.style.verticalAlign = 'middle';
+    c.style.whiteSpace = 'nowrap';
+  });
+  box.appendChild(tbl);
+
+  if ((d.orphan || []).length) {
+    box.appendChild(el('p', 'dlg__d', '宝点已没有这些本地机台（不会自动停用）：'
+      + d.orphan.map((x) => x.name).join('、')));
+  }
+
+  const acts = el('div', 'dlg__acts');
+  const cancel = el('button', 'btn btn--quiet', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', close);
+  const ok = el('button', 'btn btn--primary', '同步勾选的');
+  ok.type = 'button';
+  ok.addEventListener('click', async () => {
+    const picked = items.filter((x) => x.cb.checked).map((x) => ({
+      unit_id: x.r.local ? x.r.local.unit_id : null,
+      name: x.r.name, kind: x.r.kind, comms: x.r.comms, pos: x.r.pos,
+    }));
+    if (!picked.length) { toast('一台都没勾', 'bad'); return; }
+    ok.disabled = true;
+    ok.textContent = '同步中…';
+    try {
+      const res = await api('/api/manage/bd-sync/apply', { shop_id: MSHOP.id, items: picked });
+      toast('同步完成：新增 ' + res.created + ' · 更新 ' + res.updated
+        + ' · 写入P位 ' + res.pos + (res.merged ? ' · 停用空壳 ' + res.merged : ''));
+      close();
+      await renderUnits();
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+      ok.disabled = false;
+      ok.textContent = '同步勾选的';
+    }
+  });
+  acts.appendChild(cancel);
+  acts.appendChild(ok);
+  box.appendChild(acts);
+  root.appendChild(box);
+  document.body.appendChild(root);
+}
+
 async function renderUnits() {
   const d = await api('/api/manage/machines?shop_id=' + encodeURIComponent(MSHOP.id));
   const wrap = $('unitList');
   wrap.innerHTML = '';
+
+
 
   if (!d.rows.length) {
     const empty = el('div', 'empty');
@@ -1658,10 +1784,10 @@ async function renderUnits() {
   }
 
   const mkHead = (title, count, kind, brand) => {
-    const head = el('div', 'unit-sec__head');
-    head.appendChild(el('span', 'unit-sec__t', title));
-    head.appendChild(el('span', 'unit-sec__n', count + ' 台'));
-    const addBtn = el('button', 'btn btn--sm btn--quiet unit-sec__add', '+ 新增');
+    const head = el('h2', 'machine-group');
+    head.appendChild(el('span', null, title));
+    head.appendChild(el('span', 'machine-group__n', count + ' 台'));
+    const addBtn = el('button', 'btn btn--sm btn--quiet machine-group__add', '+ 新增');
     addBtn.type = 'button';
     addBtn.setAttribute('aria-label', '新增一台' + title);
     addBtn.addEventListener('click', () => {
@@ -1685,37 +1811,22 @@ async function renderUnits() {
     return grid;
   };
 
-  const pushers = d.rows.filter((g) => (g.kind || 'pusher') === 'pusher');
-  const pachs = d.rows.filter((g) => g.kind === 'pachinko');
-
-  // 顶部一条：多少台 + 搜索。52 台机不靠滑屏找
-  const tools = el('div', 'unit-tools');
-  tools.appendChild(el('span', 'unit-tools__stat',
-    '共 ' + d.rows.length + ' 台 · 推币 ' + pushers.length + ' · 弹珠 ' + pachs.length));
-  const qIn = el('input', 'input unit-tools__q');
-  qIn.type = 'search';
-  qIn.placeholder = '搜机台名或通讯ID';
-  qIn.setAttribute('aria-label', '搜机台名或通讯ID');
-  tools.appendChild(qIn);
-  wrap.appendChild(tools);
-
   // ---------- 推币机 ----------
+  const pushers = d.rows.filter((g) => (g.kind || 'pusher') === 'pusher');
   if (pushers.length) {
-    const sec = el('section', 'unit-sec');
-    sec.appendChild(mkHead('推币机', pushers.length, 'pusher', null));
-    if (ADD_KIND === 'pusher') sec.appendChild(addMachineForm('pusher', null));
-    sec.appendChild(mkGrid(pushers));
-    wrap.appendChild(sec);
+    wrap.appendChild(mkHead('推币机', pushers.length, 'pusher', null));
+    if (ADD_KIND === 'pusher') wrap.appendChild(addMachineForm('pusher', null));
+    wrap.appendChild(mkGrid(pushers));
   }
 
   // ---------- 弹珠机：先品牌管理，再按品牌分块 ----------
+  const pachs = d.rows.filter((g) => g.kind === 'pachinko');
   if (pachs.length) {
+    // 先加载品牌，新增面板里才有品牌可选
     const cfgNode = await brandCfg();
-    const sec = el('section', 'unit-sec');
-    sec.appendChild(mkHead('弹珠机', pachs.length, 'pachinko', null));
-    if (ADD_KIND === 'pachinko') sec.appendChild(addMachineForm('pachinko'));
-    sec.appendChild(cfgNode);
-    wrap.appendChild(sec);
+    wrap.appendChild(mkHead('弹珠机', pachs.length, 'pachinko', null));
+    if (ADD_KIND === 'pachinko') wrap.appendChild(addMachineForm('pachinko'));
+    wrap.appendChild(cfgNode);
 
     const byBrand = {};
     pachs.forEach((g) => {
@@ -1724,31 +1835,13 @@ async function renderUnits() {
     });
     const names = Object.keys(byBrand).sort((a, b) => byBrand[b].length - byBrand[a].length);
     names.forEach((b) => {
-      const bsec = el('section', 'unit-sec');
-      bsec.dataset.brand = b;
-      bsec.appendChild(mkHead(b, byBrand[b].length, 'pachinko', b));
-      bsec.appendChild(mkGrid(byBrand[b]));
-      wrap.appendChild(bsec);
+      const bh = el('h3', 'brand-group');
+      bh.appendChild(el('span', 'brand-group__name', b));
+      bh.appendChild(el('span', 'brand-group__n', byBrand[b].length + ' 台'));
+      wrap.appendChild(bh);
+      wrap.appendChild(mkGrid(byBrand[b]));
     });
   }
-
-  // 搜索：按机台名 / 通讯ID 过滤，空分组跟着藏
-  qIn.addEventListener('input', () => {
-    const v = qIn.value.trim().toLowerCase();
-    wrap.querySelectorAll('.machine').forEach((m) => {
-      m.hidden = !!v && m.textContent.toLowerCase().indexOf(v) < 0;
-    });
-    wrap.querySelectorAll('section.unit-sec').forEach((sec) => {
-      const grid = sec.querySelector('.machines');
-      if (!grid) return;                        // 品牌配置那种块不动
-      const alive = [...grid.children].some((c) => !c.hidden);
-      sec.hidden = !!v && !alive;
-    });
-    if (EDIT_KEY) {
-      const f = wrap.querySelector('.machine__name-edit');
-      if (f) { f.focus(); f.select(); }
-    }
-  });
 
   if (EDIT_KEY) {
     const f = wrap.querySelector('.machine__name-edit');
@@ -2140,23 +2233,45 @@ async function brandCfg() {
 
   if (BRANDS_SHOP_DATA) box.appendChild(shopParamsBlock());
 
-  const list = el('div', 'brand-rows');
+  const tb = el('table', 'tbl tbl--tight brand-tbl');
+  const thead = el('thead');
+  const hr = el('tr');
+  ['品牌', '台数', '玩法', '总出珠计法', '操作'].forEach((t, i) => {
+    const th = el('th', i === 1 ? 'num' : '', t);
+    th.scope = 'col';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  tb.appendChild(thead);
+
+  const body = el('tbody');
   BRANDS.forEach((b) => {
-    const row = el('div', 'brand-row');
-    row.appendChild(el('span', 'brand-row__name', b.label || b.brand));
-    row.appendChild(el('span', 'brand-row__n', b.units + ' 台'));
+    const tr = el('tr');
+    const bName = el('td', 'name', b.label || b.brand);
+    bName.dataset.label = '品牌';
+    tr.appendChild(bName);
+    const bUnits = el('td', 'num', String(b.units));
+    bUnits.dataset.label = '台数';
+    tr.appendChild(bUnits);
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
       bead_card: '投珠出卡', bead_out_card: '投珠出珠出卡' })[b.mode] || b.mode;
-    row.appendChild(el('span', 'brand-row__mode',
-      modeName + (b.out_incl === false ? ' · 总出珠不含投币出珠' : ' · 总出珠含投币出珠')));
-    const b2 = el('button', 'btn btn--sm btn--quiet brand-row__edit', '编辑');
+    const bMode = el('td', '', modeName);
+    bMode.dataset.label = '玩法';
+    tr.appendChild(bMode);
+    const bIncl = el('td', '', b.out_incl === false ? '总出珠不含投币出珠' : '总出珠含投币出珠');
+    bIncl.dataset.label = '总出珠计法';
+    tr.appendChild(bIncl);
+    const td = el('td');
+    const b2 = el('button', 'btn btn--sm brand-edit', '编辑');
     b2.type = 'button';
     b2.setAttribute('aria-label', '编辑品牌 ' + (b.label || b.brand));
     b2.addEventListener('click', () => brandDialog(b));
-    row.appendChild(b2);
-    list.appendChild(row);
+    td.appendChild(b2);
+    tr.appendChild(td);
+    body.appendChild(tr);
   });
-  box.appendChild(list);
+  tb.appendChild(body);
+  box.appendChild(tb);
   return box;
 }
 
@@ -2259,18 +2374,15 @@ function renderMachineView(card, g) {
   const h = el('h3', 'machine__name', g.key);
   h.id = 'm-' + slug(g.key);
   head.appendChild(h);
-  // 分组标题已经说明了机型，行里只在「多个卡头」时补一句
-  if (g.heads > 1) {
-    head.appendChild(el('span', 'machine__meta',
-      g.merged ? g.heads + ' 个卡头 · 共用' : g.heads + ' 个卡头'));
-  }
+  if (g.kind === 'pachinko') head.appendChild(el('span', 'machine__tag', '弹珠'));
+  head.appendChild(el('span', 'machine__meta',
+    g.heads + ' 个卡头'));
+  if (g.merged) head.appendChild(el('span', 'machine__tag machine__tag--shared', '共用码表'));
   card.appendChild(head);
 
   const ul = el('ul', 'machine__comms');
   ul.setAttribute('aria-label', g.key + ' 的卡头');
-  const all = g.pcomms || [];
-  // 全部列出来，一个都别藏；P 位用接口给的墙上位置，没标就写「未标」
-  all.forEach((x) => {
+  (g.pcomms || []).forEach((x) => {
     const li = el('li', 'chip chip--pos');
     li.appendChild(el('b', null, (x.p || '未标') + '：'));
     li.appendChild(el('span', null, x.comm));
@@ -2280,35 +2392,18 @@ function renderMachineView(card, g) {
 
   const foot = el('footer', 'machine__foot');
 
-  const more = el('details', 'machine__more');
-  const sum = el('summary');
-  sum.setAttribute('aria-label', '更多操作');
-  sum.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">'
-    + '<circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>';
-  const menu = el('div', 'machine__more__menu');
-
-  card.tabIndex = 0;
-  card.setAttribute('role', 'group');
-  const openEdit = () => { EDIT_KEY = g.key; renderUnits(); };
-  card.addEventListener('click', (ev) => {
-    if (ev.target.closest('.machine__more')) return;
-    openEdit();
-  });
-  card.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && ev.target === card) { ev.preventDefault(); openEdit(); }
-  });
-
-  const edit = el('button', 'btn btn--sm btn--quiet machine__edit', '编辑');
+  const edit = el('button', 'btn btn--sm', '编辑');
   edit.type = 'button';
   edit.setAttribute('aria-label', '编辑机台 ' + g.key);
   edit.addEventListener('click', () => { EDIT_KEY = g.key; renderUnits(); });
+  foot.appendChild(edit);
 
   if (!g.merged && g.heads > 1) {
     const b = el('button', 'btn btn--sm btn--quiet', '合并成一台');
     b.type = 'button';
     b.setAttribute('aria-label', '把 ' + g.key + ' 的 ' + g.heads + ' 个卡头合并成一台');
     b.addEventListener('click', () => mergeMachine(g));
-    menu.appendChild(b);
+    foot.appendChild(b);
   }
 
   if (g.merged) {
@@ -2328,7 +2423,7 @@ function renderMachineView(card, g) {
         renderUnits();
       } catch (e) { toast(String(e.message || e), 'bad'); }
     });
-    menu.appendChild(sp);
+    foot.appendChild(sp);
   }
 
   const del = el('button', 'btn btn--sm btn--quiet', '停用');
@@ -2347,22 +2442,7 @@ function renderMachineView(card, g) {
       renderUnits();
     } catch (e) { toast(String(e.message || e), 'bad'); }
   });
-  menu.appendChild(del);
-
-  // 只有编辑露在外面；合并/拆分/停用收进「更多」
-  foot.appendChild(edit);
-  if (menu.children.length) {
-    sum.setAttribute('aria-label', '更多操作：合并 / 拆分 / 停用');
-    more.appendChild(sum);
-    more.appendChild(menu);
-    foot.appendChild(more);
-    // 点菜单里的东西就把菜单收起来
-    more.addEventListener('click', (ev) => {
-      if (ev.target.closest('.btn')) more.open = false;
-    });
-  } else {
-    menu.remove();
-  }
+  foot.appendChild(del);
 
   card.appendChild(foot);
 }
@@ -2375,17 +2455,7 @@ function renderMachineEdit(card, g) {
   card.dataset.editing = 'true';
   card.setAttribute('aria-label', '编辑机台 ' + g.key);
 
-  const mh = el('div', 'mf__head');
-  mh.appendChild(el('span', 'mf__t', '编辑机台'));
-  const mx = el('button', 'mf__x');
-  mx.type = 'button';
-  mx.setAttribute('aria-label', '退出编辑');
-  mx.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
-  mx.addEventListener('click', () => { EDIT_KEY = null; renderUnits(); });
-  mh.appendChild(mx);
-  card.appendChild(mh);
-
-  const rowN = el('label', 'mf__field');
+  const rowN = el('div', 'mf__row');
   rowN.appendChild(el('span', 'mf__k', '名称'));
   const nameIn = el('input', 'input mf__name');
   nameIn.type = 'text';
@@ -2398,7 +2468,7 @@ function renderMachineEdit(card, g) {
   // 品牌（只对弹珠机）
   let brandVal = g.brand || '';
   if ((g.kind || 'pusher') === 'pachinko') {
-    const row = el('div', 'mf__field');
+    const row = el('div', 'mf__row');
     row.appendChild(el('span', 'mf__k', '品牌'));
     const wrap = el('div', 'pick pick--block');
     const btn = el('button', 'pick__btn');
@@ -2430,7 +2500,7 @@ function renderMachineEdit(card, g) {
   }
 
   // 卡头
-  const rowC = el('div', 'mf__field');
+  const rowC = el('div', 'mf__row mf__row--top');
   rowC.appendChild(el('span', 'mf__k', '卡头'));
   const ul = el('ul', 'mf__chips');
   ul.setAttribute('aria-label', '通讯ID');
@@ -2441,7 +2511,7 @@ function renderMachineEdit(card, g) {
 
   function addChip(val, p) {
     const li = el('li', 'chip chip--edit');
-    li.appendChild(el('b', 'chip__p', 'P' + (p || 1)));
+    li.appendChild(el('b', 'chip__p', p || '未标'));
     const inp = el('input', 'chip__in');
     inp.type = 'text';
     inp.inputMode = 'numeric';
@@ -2470,7 +2540,9 @@ function renderMachineEdit(card, g) {
     return inp;
   }
 
-  g.comms.forEach((c, i) => addChip(c, i + 1));
+  const posOf = {};
+  (g.pcomms || []).forEach((x) => { posOf[String(x.comm)] = x.p; });
+  g.comms.forEach((c) => addChip(c, posOf[String(c)] || ''));
 
   const addLi = el('li', 'chip chip--add');
   const addBtn = el('button', 'chip__add');
@@ -2919,7 +2991,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   $('btnConfirm').addEventListener('click', confirmUnits);
-  $('btnFetchAll').addEventListener('click', fetchAll);
+  if ($('btnBdSync')) $('btnBdSync').addEventListener('click', () => openBdSync($('btnBdSync')));
   $('btnImportShops').addEventListener('click', importShops);
   $('btnBackShops').addEventListener('click', loadSettings);
   $('btnScanBack').addEventListener('click', () => {
