@@ -2228,9 +2228,10 @@ def bd_sync_apply(shop_id: str, items: list) -> dict:
         # 默认一台卡头一块码表：宝点一个机台带 4 个卡头，同步下来是 4 行，不自动并成「共用码表」
         targets = set()
         for i, cid in enumerate(comms):
-            sub = name if len(comms) == 1 else "%s P%d" % (name, i + 1)
+            # 拆开的几块仍归同一台机：第一块用原名，其余自动加 (2)(3)(4)，
+            # 这样设置页还是一行一台机、显示 N 个卡头，只是不再是「共用码表」
             with conn() as c:
-                sub = unique_unit_name(c, shop_id, sub, skip_id=(uid if i == 0 else None))
+                sub = unique_unit_name(c, shop_id, name, skip_id=(uid if i == 0 else None))
             res = save_unit({"shop_id": shop_id, "id": (uid if i == 0 else None),
                              "name": sub, "kind": kind, "comms": [cid], "shared": False})
             targets.add(res["id"])
