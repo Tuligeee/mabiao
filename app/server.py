@@ -376,6 +376,42 @@ def bd_alive(shop_id: str = "") -> dict:
     return {"alive": False, "source": "", "exp_text": "", "left_hours": -1, "account": ""}
 
 
+BD_AUTO_LOGIN = os.environ.get("METER_BD_AUTO", "1") == "1"
+BD_VENV_PY = os.environ.get("METER_BD_VENV_PY") or "/opt/日报自动化_服务器部署包/.venv/bin/python"
+BD_LOGIN_PY = os.path.join(str(BASE), "baodian_login.py")
+_BD_AUTO_TS = [0.0]
+
+
+def bd_auto_login(force: bool = False) -> dict:
+    """登录态过期就用账密自动重登（走日报 venv 的 python，那边有 ddddocr）。
+
+    成功会重写 /opt/taocan/.cache/session.json，所有工具一起受益。
+    """
+    if not BD_AUTO_LOGIN:
+        return {"ok": False, "skipped": "自动登录已关闭"}
+    now = time.time()
+    if not force and now - _BD_AUTO_TS[0] < 300:      # 五分钟内只试一次，别把账号打到风控
+        return {"ok": False, "skipped": "刚试过，等一会儿"}
+    _BD_AUTO_TS[0] = now
+    import subprocess
+    try:
+        pr = subprocess.run([BD_VENV_PY, BD_LOGIN_PY, "--ensure"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, timeout=180)
+        out = pr.stdout.decode("utf-8", "replace").strip().splitlines()
+        data = {}
+        for line in reversed(out):
+            line = line.strip()
+            if line.startswith("{"):
+                data = json.loads(line)
+                break
+        if pr.returncode != 0:
+            return {"ok": False, "error": (data.get("error") or "登录失败")[:200]}
+        return data or {"ok": True}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:200]}
+
+
 def bd_call(path: str, body: dict, timeout=90) -> dict:
     import requests
     k = bd_link_key()
@@ -843,6 +879,11 @@ def fetch_day(shop_id: str, day: str) -> dict:
         return fetch_jingjian_day(shop_id, day)
     if prov == "manual":
         return {"ok": True, "provider": "manual", "skipped": "只抄表，没有卡头数据"}
+    # 宝点店：登录态过期就先拿账密自动登一次（成功后所有店一起恢复）
+    if not bd_alive(shop_id).get("alive"):
+        auto = bd_auto_login()
+        if not auto.get("ok") and not auto.get("skipped"):
+            raise RuntimeError("宝点登录已过期，自动登录也没成功：%s" % auto.get("error"))
     shop = shop_of(d)
     bd = baodian(shop_id)
     up = bd.fetch_up(shop, day)
