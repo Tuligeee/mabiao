@@ -1627,13 +1627,13 @@ async function openShop(shop) {
   $('unitPane').hidden = false;
   $('unitTitle').textContent = shop.name;
   $('btnBackShops').hidden = S.role === 'store';
-  if ($('btnBdSync')) $('btnBdSync').hidden = false;
+  if ($('btnBdSync')) $('btnBdSync').hidden = (shop.provider || 'baodian') !== 'baodian';
   await renderUnits();
 }
 
 let EDIT_KEY = null;
 
-/* 从宝点同步机台：拉清单 → 勾选 → 写入（名称/类型/卡头/P位 以宝点为准） */
+/* 从后台同步机台信息：拉清单 → 勾选 → 写入（名称/类型/卡头/P位 以后台为准） */
 async function openBdSync(btn) {
   if (btn) { btn.disabled = true; btn.textContent = '拉取中…（约15秒）'; }
   let d;
@@ -1641,10 +1641,10 @@ async function openBdSync(btn) {
     d = await api('/api/manage/bd-sync/preview?shop_id=' + encodeURIComponent(MSHOP.id));
   } catch (e) {
     toast(String(e.message || e), 'bad');
-    if (btn) { btn.disabled = false; btn.textContent = '从宝点同步机台'; }
+    if (btn) { btn.disabled = false; btn.textContent = '从后台同步机台信息'; }
     return;
   }
-  if (btn) { btn.disabled = false; btn.textContent = '从宝点同步机台'; }
+  if (btn) { btn.disabled = false; btn.textContent = '从后台同步机台信息'; }
 
   const rows = d.rows || [];
   const root = el('div');
@@ -1666,7 +1666,7 @@ async function openBdSync(btn) {
     + 'background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35)';
   const dlgHead = el('div');
   dlgHead.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px';
-  const dlgTitle = el('h2', 'dlg__t', '从宝点同步机台');
+  const dlgTitle = el('h2', 'dlg__t', '从后台同步机台信息');
   dlgTitle.style.cssText = 'margin:0;font-size:20px;font-weight:600';
   dlgHead.appendChild(dlgTitle);
   const xBtn = el('button', 'btn btn--quiet', '×');
@@ -1676,7 +1676,7 @@ async function openBdSync(btn) {
   xBtn.addEventListener('click', close);
   dlgHead.appendChild(xBtn);
   box.appendChild(dlgHead);
-  box.appendChild(el('p', 'dlg__d', '宝点共 ' + d.devices + ' 台要写码表 · P位取到 '
+  box.appendChild(el('p', 'dlg__d', '后台共 ' + d.devices + ' 台要写码表 · P位取到 '
     + d.pos_have + ' 个卡头（近 ' + d.days + ' 天）· 没勾的不会动'));
 
   const tbl = el('table');
@@ -1684,7 +1684,7 @@ async function openBdSync(btn) {
   const thead = el('thead');
   const htr = el('tr');
   htr.appendChild(el('th'));
-  ['机台', '类型', '卡头ID', 'P位'].forEach((t) => htr.appendChild(el('th', null, t)));
+  ['机台', '卡头ID', 'P位'].forEach((t) => htr.appendChild(el('th', null, t)));
   const master = document.createElement('input');
   master.type = 'checkbox';
   master.title = '全选 / 全不选';
@@ -1694,21 +1694,32 @@ async function openBdSync(btn) {
   tbl.appendChild(thead);
   const tbody = el('tbody');
   const items = [];
-  rows.forEach((r) => {
+  // 按机台种类分组：推币机一组、弹珠机一组（组里没东西就不出现）
+  const addRow = (r) => {
     const tr = el('tr');
     const td0 = el('td');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = r.status !== 'same';
+    cb.setAttribute('aria-label', '同步 ' + r.name);
     td0.appendChild(cb);
     items.push({ cb, r });
     tr.appendChild(td0);
     tr.appendChild(el('td', null, r.name));
-    tr.appendChild(el('td', null, r.kind === 'pachinko' ? '弹珠机' : '推币机'));
     tr.appendChild(el('td', 'comm', r.comms.join(' / ')));
     tr.appendChild(el('td', 'comm', (r.pos || []).filter(Boolean).join(' / ') || '未标'));
-
     tbody.appendChild(tr);
+  };
+  [['pusher', '推币机'], ['pachinko', '弹珠机']].forEach(([kind, label]) => {
+    const list = rows.filter((r) => (r.kind || 'pusher') === kind);
+    if (!list.length) return;
+    const gr = el('tr', 'bd-sync__grp');
+    const th = el('th', 'bd-sync__grp-t', label + ' · ' + list.length + ' 台');
+    th.colSpan = 4;
+    th.scope = 'colgroup';
+    gr.appendChild(th);
+    tbody.appendChild(gr);
+    list.forEach(addRow);
   });
   tbl.appendChild(tbody);
   const refreshMaster = () => {
@@ -1731,7 +1742,7 @@ async function openBdSync(btn) {
   box.appendChild(tbl);
 
   if ((d.orphan || []).length) {
-    box.appendChild(el('p', 'dlg__d', '宝点已没有这些本地机台（不会自动停用）：'
+    box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
       + d.orphan.map((x) => x.name).join('、')));
   }
 

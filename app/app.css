@@ -1627,3 +1627,14 @@ body[data-scanning="1"] { overflow: hidden; }
   border-color: transparent;
   font-weight: var(--weight-semibold, 600);
 }
+
+/* 从后台同步机台：按机台种类分组的组头 */
+.bd-sync__grp-t {
+  text-align: start;
+  background: var(--surface-2, #f6f7f9);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold, 600);
+  color: var(--ink-2, #4a4a4a);
+  letter-spacing: .02em;
+}
+
