@@ -565,8 +565,9 @@ async function confirmUnits() {
 }
 
 function baseName(n) {
-  // 「冰淇淋嘉年华 (2)」「可乐风暴 733586」都归到同一台机
-  return String(n || '').replace(/\s*\(\d+\)\s*$/, '').replace(/\s+\d{5,}$/, '').trim();
+  // 「冰淇淋嘉年华 (2)」「可乐风暴 733586」「可乐风暴 P2」都归到同一台机
+  return String(n || '').replace(/\s*\(\d+\)\s*$/, '').replace(/\s+\d{5,}$/, '')
+    .replace(/\s+P\d+$/, '').trim();
 }
 
 /* 同名/同品牌的排在一起：推币机按机台名，弹珠机按品牌；组内按 P 位 */
