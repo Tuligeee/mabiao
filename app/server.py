@@ -3051,6 +3051,7 @@ def manage_shops() -> list:
 
 
 def manage_units(shop_id: str) -> list:
+    out = []
     with conn() as c:
         us = [dict(r) for r in c.execute(
             "SELECT * FROM units WHERE shop_id=? ORDER BY active DESC, name", (shop_id,))]
@@ -3063,10 +3064,18 @@ def manage_units(shop_id: str) -> list:
                 u["machine_name"] = m["name"]
                 u["machine_shared"] = m["shared"]
                 u["machine_code"] = m["code"]
-                # 这台机一共几个码表位
                 u["machine_slots"] = c.execute(
                     "SELECT COUNT(*) FROM units WHERE machine_id=?", (m["id"],)).fetchone()[0]
-    return us
+                # 共用一块码表的机台只露一行，卡头显示整台机的（和以前的页面一致）
+                if m["shared"]:
+                    if (u.get("pos") or 1) != 1:
+                        continue
+                    u["shared"] = 1
+                    u["comms"] = [{"comm_id": x, "console_no": None}
+                                  for x in machine_comms(m["id"])]
+                    u["name"] = m["name"]
+            out.append(u)
+    return out
 
 
 def manage_machines(shop_id: str) -> list:

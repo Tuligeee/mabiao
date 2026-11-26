@@ -2587,8 +2587,12 @@ function renderMachineView(card, g) {
       });
       if (!ok) return;
       try {
-        await api('/api/manage/unit/split', { id: g.units[0].id });
-        toast('已拆分');
+        await api('/api/units', {
+          shop_id: MSHOP.id,
+          unit_id: g.units[0].id,
+          shared: 0,
+        });
+        toast('已拆开：每个卡头一个码表');
         renderUnits();
       } catch (e) { toast(String(e.message || e), 'bad'); }
     });
@@ -2796,16 +2800,17 @@ function renderMachineEdit(card, g) {
 async function mergeMachine(g) {
   const ok = await UI.confirm({
     title: '合并成一台',
-    body: '「' + g.key + '」的 ' + g.comms.length + ' 个卡头合成一台，共用一个码表，以后只填一个读数。',
+    body: '「' + g.key + '」的 ' + g.comms.length + ' 个卡头算一台机，只有一块码表，以后只填一个读数；卡头不动，随时能拆开。',
     okText: '合并',
   });
   if (!ok) return;
   try {
-    const r = await api('/api/manage/unit/merge', {
+    await api('/api/units', {
       shop_id: MSHOP.id,
-      ids: g.units.map((u) => u.id),
+      unit_id: g.units[0].id,
+      shared: 1,
     });
-    toast('已合并：' + r.name + '（' + r.comms + ' 个卡头）');
+    toast('已合并：' + g.key + '（' + g.comms.length + ' 个卡头，填 1 个数）');
     await renderUnits();
   } catch (e) {
     toast(String(e.message || e), 'bad');
