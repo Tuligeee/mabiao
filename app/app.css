@@ -1612,6 +1612,22 @@ body[data-scanning="1"] { overflow: hidden; }
 .machine__foot { justify-content: flex-end; }
 .machine__foot .btn { flex: none; }
 
+/* 编辑态不进机台行的两列网格：名称/品牌/卡头竖排，否则表单会被塞进右侧窄列 */
+.machine[data-editing="true"] {
+  display: block;
+  grid-template-areas: none;
+  grid-template-columns: none;
+  padding: var(--space-4) var(--space-5);
+  cursor: default;
+}
+.machine[data-editing="true"] .machine__foot,
+.machine[data-editing="true"] .machine__comms { grid-area: auto; }
+.machine[data-editing="true"] .mf__row,
+.machine[data-editing="true"] .mf__acts { max-inline-size: 52rem; }
+/* 编辑时品牌下拉不被列表容器的 overflow:hidden 裁掉 */
+.machines:has(.machine[data-editing="true"]) { overflow: visible; }
+.mf__row .pick--block { min-inline-size: 0; }
+
 /* 设置页顶部动作区：二维码 + 从宝点同步 同一行，提示语收成一行 */
 .setup-acts { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .setup-acts .setup-hint { font-size: var(--text-sm); color: var(--ink-3); margin: 0; }
