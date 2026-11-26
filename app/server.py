@@ -3058,6 +3058,7 @@ def manage_shops() -> list:
 
 def manage_units(shop_id: str) -> list:
     out = []
+    seen_m = set()
     with conn() as c:
         us = [dict(r) for r in c.execute(
             "SELECT * FROM units WHERE shop_id=? ORDER BY active DESC, name", (shop_id,))]
@@ -3074,8 +3075,9 @@ def manage_units(shop_id: str) -> list:
                     "SELECT COUNT(*) FROM units WHERE machine_id=?", (m["id"],)).fetchone()[0]
                 # 共用一块码表的机台只露一行，卡头显示整台机的（和以前的页面一致）
                 if m["shared"]:
-                    if (u.get("pos") or 1) != 1:
+                    if m["id"] in seen_m:
                         continue
+                    seen_m.add(m["id"])
                     u["shared"] = 1
                     u["comms"] = [{"comm_id": x, "console_no": None}
                                   for x in machine_comms(m["id"])]
