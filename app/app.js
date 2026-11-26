@@ -509,7 +509,10 @@ async function loadEntry() {
 function renderConfirm() {
   const ul = $('confirmList');
   ul.innerHTML = '';
-  S.allRows.forEach((r) => {
+  // 空壳（没卡头也没读数）是同步/拆分留下的旧行，不占确认清单
+  const rows = S.allRows.filter((r) => (r.comms || []).length
+    || r.in_r !== null || r.out_r !== null);
+  rows.forEach((r) => {
     const li = el('li', 'sheet__row');
     li.dataset.off = r.active === false ? 'true' : 'false';
 
@@ -536,7 +539,7 @@ function renderConfirm() {
     li.appendChild(el('span', 'sheet__meta', meta.join(' · ')));
     ul.appendChild(li);
   });
-  $('confirmHint').textContent = '共 ' + S.allRows.length + ' 台，勾选的要填';
+  $('confirmHint').textContent = '共 ' + rows.length + ' 台，勾选的要填';
 }
 
 async function confirmUnits() {
@@ -1914,7 +1917,7 @@ async function openBdSync(btn) {
     try {
       const res = await api('/api/manage/bd-sync/apply', { shop_id: MSHOP.id, items: picked });
       toast('同步完成：新增 ' + res.created + ' · 更新 ' + res.updated
-        + ' · 写入P位 ' + res.pos + (res.merged ? ' · 停用空壳 ' + res.merged : ''));
+        + ' · 写入P位 ' + res.pos + (res.merged ? ' · 并掉旧行 ' + res.merged : ''));
       close();
       await renderUnits();
     } catch (e) {

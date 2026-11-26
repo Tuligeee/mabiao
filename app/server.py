@@ -128,7 +128,7 @@ def ensure_codes():
         if "brand" not in ucols:
             c.execute("ALTER TABLE units ADD COLUMN brand TEXT")
 
-        # 门店编号 S01..S16
+        # 门店编号：和任务平台对齐，直接用它的门店 ID（ST01..）；没对齐的才临时编 S01..
         todo = [dict(r) for r in c.execute(
             "SELECT id FROM shops WHERE code IS NULL OR code='' ORDER BY name")]
         used = {r["code"] for r in c.execute("SELECT code FROM shops WHERE code<>''") if r["code"]}
