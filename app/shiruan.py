@@ -104,10 +104,21 @@ def day_summary(day: str, store_id: str, sort_name: str = SORT_PUSHER,
         mach = str(r.get("Mach_No") or "").strip()
         if not mach:
             continue
+        # 机位号最后一个字母就是 P 位：A→P1、B→P2
+        letter = ""
+        for ch in reversed(mach):
+            if ch.isalpha():
+                letter = ch.upper()
+                break
+        pos = (ord(letter) - 64) if letter else 0
         out.append({
             "machine": mach,
             "coins": float(r.get("Coin_Num") or 0),
             "count": float(r.get("Times") or 0),
+            "name": str(r.get("Type_Name") or "").strip(),
+            "base": str(r.get("M_Mach_No") or "").strip(),
+            "pos": pos,
+            "sort": str(r.get("Sort_Name") or "").strip(),
         })
     out.sort(key=lambda x: x["machine"])
     return out

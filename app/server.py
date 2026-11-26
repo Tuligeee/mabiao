@@ -1093,7 +1093,13 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         up = sum((g["up_native"] or 0) + (g["up_give"] or 0) for g in got) if got else None
         # 鲸舰店：机台维度，按机台名对上
         if not got and mcards:
+            # 先按机台名，再按卡头（世软的机台名是「碧海传说 A」，库里存的是机位号）
             hit = mcards.get(u["name"])
+            if not hit:
+                for cid in comms:
+                    if cid in mcards:
+                        hit = mcards[cid]
+                        break
             if hit:
                 # 鲸舰只有投币额，没有下币
                 up = hit["coins"] or 0
