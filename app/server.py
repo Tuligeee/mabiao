@@ -876,6 +876,53 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
     return {"ok": True, "provider": "jingjian", "machines": len(rows)}
 
 
+def sync_jingjian_comms(shop_id: str, days: int = 7) -> dict:
+    """从鲸舰消费明细里把每台机的卡头补进码表：P位 + 通讯ID。
+
+    鲸舰汇总接口只有机台级金额，明细接口才带 consoleNo / commId。只补卡头，
+    不动机台名，也不新增机台（对不上名字的列出来给人看）。
+    """
+    require_hq()
+    shop_id = guard_shop(shop_id)
+    d = shop_row(shop_id) or {}
+    if (d.get("provider") or "baodian") != "jingjian":
+        raise RuntimeError("这家店不是鲸舰取数")
+    import jingjian
+    base = d.get("jj_base") or jingjian.DEFAULT_BASE
+    shop_no = str(d.get("jj_shop_id") or "").strip()
+    if not shop_no:
+        raise RuntimeError("这家店没配鲸舰门店编号（jj_shop_id）")
+    days = max(1, int(days or 7))
+    day_to = date.today().isoformat()
+    day_from = (date.today() - timedelta(days=days - 1)).isoformat()
+    items = jingjian.machine_consoles(base, shop_no, day_from, day_to)
+    added = 0
+    updated = []
+    missed = []
+    with conn() as c:
+        units = {r["name"]: dict(r) for r in c.execute(
+            "SELECT id,name FROM units WHERE shop_id=? AND active=1", (shop_id,))}
+        for it in items:
+            u = units.get(it["machine"])
+            if not u:
+                missed.append(it["machine"])
+                continue
+            for cs in it["consoles"]:
+                exists = c.execute("SELECT 1 FROM comms WHERE comm_id=?", (cs["comm"],)).fetchone()
+                c.execute("INSERT INTO comms(comm_id,unit_id,console_no,updated_at) VALUES(?,?,?,?) "
+                          "ON CONFLICT(comm_id) DO UPDATE SET unit_id=excluded.unit_id, "
+                          "console_no=excluded.console_no, updated_at=excluded.updated_at",
+                          (cs["comm"], u["id"], cs["p"], now()))
+                comm_owner_set(c, cs["comm"], u["id"], shop_id, day_to)
+                if not exists:
+                    added += 1
+            if len(it["consoles"]) > 1:
+                c.execute("UPDATE units SET shared=1 WHERE id=?", (u["id"],))
+            updated.append({"machine": it["machine"], "consoles": len(it["consoles"])})
+    return {"ok": True, "machines": len(items), "comms_added": added,
+            "updated": updated, "missed": missed, "from": day_from, "to": day_to}
+
+
 def fetch_shiruan_day(shop_id: str, day: str) -> dict:
     """世软店：拉机台收币，落 machine_daily（世软也是机台维度）。"""
     import shiruan
@@ -1785,6 +1832,9 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/api/manage/bd-sync/apply":
                 sid = (b.get("shop_id") or "").strip() or (resolve_shop(actor()) or "")
                 return self._send(200, bd_sync_apply(sid, b.get("items") or []))
+            if p == "/api/manage/jj-comms/sync":
+                sid = (b.get("shop_id") or "").strip() or (resolve_shop(actor()) or "")
+                return self._send(200, sync_jingjian_comms(sid, int(b.get("days") or 7)))
             if p == "/api/manage/unit/save":
                 r = save_unit(b)
                 ensure_codes()
@@ -2045,7 +2095,11 @@ def sync_pos(shop_id: str, days: int = 30) -> dict:
 
 # 宝点「项目分组」→ 本地两类码表（2026-11-26 用户定）
 BD_PACHINKO_TEAMS = ("出珠弹珠机", "蓝票弹珠机")
-BD_PUSHER_TEAMS = ("中岛推币类", "其他推币机", "屏幕机", "连排推币机")
+BD_PUSHER_TEAMS = ("中岛推币类", "其他推币机", "屏幕机", "屏幕类",
+                   "连排推币机", "连排推币类", "推币机")
+# 宝点的项目分组名改过几次（屏幕机→屏幕类、连排推币机→连排推币类），
+# 只认白名单会漏机台，所以再按关键词兜一层（2026-11-26 杭州店整批推币机被漏掉）
+TEAM_KIND_KW = (("弹珠", "pachinko"), ("推币", "pusher"), ("屏幕", "pusher"))
 
 
 def _bd_team(raw) -> str:
@@ -2079,7 +2133,9 @@ def bd_device_list(shop_id: str) -> list:
             elif team in BD_PUSHER_TEAMS:
                 kind = "pusher"
             else:
-                continue
+                kind = next((k for kw, k in TEAM_KIND_KW if kw in team), None)
+                if not kind:
+                    continue
             comms = [c.strip() for c in str(x.get("commIds") or "").split(",") if c.strip()]
             # 脏数据：宝点里有 commIds 是 "0" 的（彩虹王国），不是真卡头，跳过
             comms = [c for c in comms if c.isdigit() and c != "0"]

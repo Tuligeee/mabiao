@@ -175,6 +175,48 @@ def save_initial(tok: str, base: str = DEFAULT_BASE, shop_id: str = "") -> dict:
     return {"ok": True, "shop_id": str(shop_id or "")}
 
 
+def machine_consoles(base: str, shop_id, day_from: str, day_to: str, chain_id: str = "",
+                     max_pages: int = 8) -> list:
+    """机台 + 卡头清单：从消费明细里取「机台 / P位(consoleNo) / 通讯ID(commId)」。
+
+    汇总接口只有机台级金额；明细接口 /machineplaylog/export 才带 consoleNo 和 commId。
+    先用汇总拿机台（含当天没玩的），再按 machineId 过滤明细，逐台收集它的机位。
+    返回 [{machine, machineNo, kind, consoles:[{p, comm}]}]
+    """
+    tok = token(base, shop_id, chain_id)
+    body = {"startDate": day_from, "endDate": day_to, "KindIdStr": "", "isCalculate": True}
+    r = _request(base, "POST", "/device/manager/machineplaylog/getsummarylist", body, token=tok)
+    if not r.get("success"):
+        raise JingjianError("鲸舰汇总接口失败: %r" % (r.get("msg"),))
+    out = []
+    for m in r.get("data") or []:
+        mid = m.get("machineId")
+        name = (m.get("machineName") or "").strip()
+        if not mid or not name:
+            continue
+        consoles = {}
+        for pi in range(1, max_pages + 1):
+            q = {"startDate": day_from, "endDate": day_to, "KindIdStr": "", "isCalculate": True,
+                 "machineId": mid, "pageIndex": pi, "pageSize": 200}
+            try:
+                rr = _request(base, "POST", "/device/manager/machineplaylog/export", q, token=tok)
+            except JingjianError:
+                break
+            rows = rr.get("data") or []
+            before = len(consoles)
+            for x in rows:
+                cno = str(x.get("consoleNo") or "").strip().upper()
+                cid = x.get("commId")
+                if cno and cid:
+                    consoles.setdefault(cno, str(cid))
+            if len(rows) < 20 or len(consoles) == before:
+                break
+        out.append({"machine": name, "machineNo": m.get("machineNo"),
+                    "kind": m.get("kindName"),
+                    "consoles": [{"p": p, "comm": consoles[p]} for p in sorted(consoles)]})
+    return out
+
+
 def day_summary(base: str, shop_id, day: str, chain_id: str = "") -> list:
     """一天一店的机台汇总 → [{machine, coins, count}]。"""
     tok = token(base, shop_id, chain_id)

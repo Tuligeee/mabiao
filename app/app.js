@@ -1560,6 +1560,7 @@ async function loadSettings() {
 
   MSHOP = null;
   if ($('btnBdSync')) $('btnBdSync').hidden = true;
+  if ($('btnJjSync')) $('btnJjSync').hidden = true;
   $('shopPane').hidden = false;
   $('unitPane').hidden = true;
 
@@ -1636,10 +1637,30 @@ async function openShop(shop) {
   $('unitTitle').textContent = shop.name;
   $('btnBackShops').hidden = S.role === 'store';
   if ($('btnBdSync')) $('btnBdSync').hidden = (shop.provider || 'baodian') !== 'baodian';
+  if ($('btnJjSync')) $('btnJjSync').hidden = (shop.provider || '') !== 'jingjian';
   await renderUnits();
 }
 
 let EDIT_KEY = null;
+
+/* 从鲸舰同步卡头：把每台机的 P位 + 通讯ID 补进来（只补卡头，不改机台名） */
+async function syncJjComms(btn) {
+  if (!MSHOP) return;
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '同步中…';
+  try {
+    const r = await api('/api/manage/jj-comms/sync', { shop_id: MSHOP.id, days: 7 });
+    toast('卡头已同步：' + r.machines + ' 台，新增 ' + r.comms_added + ' 个卡头'
+      + ((r.missed || []).length ? '；名字对不上的 ' + r.missed.length + ' 台' : ''));
+    await renderUnits();
+  } catch (e) {
+    toast(String(e.message || e), 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
 
 /* 从后台同步机台信息：拉清单 → 勾选 → 写入（名称/类型/卡头/P位 以后台为准） */
 async function openBdSync(btn) {
@@ -2984,6 +3005,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnConfirm').addEventListener('click', confirmUnits);
   if ($('btnBdSync')) $('btnBdSync').addEventListener('click', () => openBdSync($('btnBdSync')));
+  if ($('btnJjSync')) $('btnJjSync').addEventListener('click', () => syncJjComms($('btnJjSync')));
   $('btnBackShops').addEventListener('click', loadSettings);
   $('btnScanBack').addEventListener('click', () => {
     if (HIST.ready && history.length > 1) history.back();
