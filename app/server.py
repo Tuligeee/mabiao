@@ -389,6 +389,8 @@ def bd_auto_login(force: bool = False) -> dict:
     """
     if not BD_AUTO_LOGIN:
         return {"ok": False, "skipped": "自动登录已关闭"}
+    if not (os.path.exists(BD_VENV_PY) and os.path.exists(BD_LOGIN_PY)):
+        return {"ok": False, "skipped": "本机没有登录脚本/依赖环境（只在服务器上生效）"}
     now = time.time()
     if not force and now - _BD_AUTO_TS[0] < 300:      # 五分钟内只试一次，别把账号打到风控
         return {"ok": False, "skipped": "刚试过，等一会儿"}
