@@ -1225,6 +1225,8 @@ function renderRecon() {
       if (c.key === 'name') {
         const tdName = el('td', 'name');
         // 组头已经有名字了，卡上写「P位：通讯ID」（合并的写 P1–P4）
+        // 弹珠机一台一行，行里还得带机台名，不然同品牌下分不出是哪台
+        if (pach) tdName.appendChild(el('span', 'tbl__mach', baseName(r.name) + ' '));
         const ps = (r.poss || []).filter(Boolean);
         const one = ps.length === 1;
         const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
