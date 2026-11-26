@@ -611,7 +611,8 @@ function renderEntry() {
     const pc = (r.pcomms || []).filter((x) => x && x.comm);
     const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
     // 两种机台都带机台名：凤凰城001 P1：671567 / 塔兰弹珠机-001 P1：817879
-    id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
+    // 拆分出来的「(2)(3)」不显示——同组里靠 P 位区分
+    id.appendChild(el('span', 'lrow__name', baseName(nm ? nm[1] : r.name) || r.name));
     if (pc.length) {
       pc.forEach((x) => id.appendChild(el('span', 'lrow__comm', (x.p || '未标') + '：' + x.comm)));
     } else if (nm) {
