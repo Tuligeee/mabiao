@@ -523,11 +523,12 @@ function renderConfirm() {
     box.innerHTML = '<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     cb.appendChild(inp);
     cb.appendChild(box);
-    cb.appendChild(el('span', 'sheet__name', r.name));
+    cb.appendChild(el('span', 'sheet__name', baseName(r.name) || r.name));
     li.appendChild(cb);
 
     const meta = [];
-    if (r.comm_count) meta.push(r.comm_count + ' 个通讯ID');
+    const pc = (r.pcomms || []).filter((x) => x && x.comm);
+    if (pc.length) meta.push(pc.map((x) => x.p || '未标').join(' / '));
     if (r.shared) meta.push('共用码表');
     if (!r.has_card && (S.provider || 'baodian') !== 'manual') meta.push(provLabel() + '无数据');
     li.appendChild(el('span', 'sheet__meta', meta.join(' · ')));
@@ -577,24 +578,39 @@ function renderEntry() {
   const ul = $('entryList');
   ul.innerHTML = '';
 
+  // 同一台机的几个卡头归成一组：组头写机台名，卡上只写 P 位 + 通讯ID
+  const counts = {};
   S.entry.forEach((r) => {
+    const b = baseName(r.name) || r.name;
+    counts[b] = (counts[b] || 0) + 1;
+  });
+  let lastBase = null;
+
+  S.entry.forEach((r) => {
+    const base = baseName(r.name) || r.name;
+    if (base !== lastBase) {
+      const gh = el('li', 'entry-group');
+      gh.appendChild(el('span', 'entry-group__name', base));
+      if (counts[base] > 1) gh.appendChild(el('span', 'entry-group__n', counts[base] + ' 个卡头'));
+      ul.appendChild(gh);
+      lastBase = base;
+    }
+
     const li = el('li', 'lrow');
     li.dataset.unit = String(r.unit_id);
 
     const id = el('div', 'lrow__id');
-    // 老命名「可乐风暴 733586」：名字和通讯ID分开显示
-    const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-    id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
-    // 卡头：P 位取 comms.console_no，拆开后靠这个认出是哪一块表
+    // 卡上官的就是「P位：通讯ID」；没有卡头记录才退回机台名/号码
     const pc = (r.pcomms || []).filter((x) => x && x.comm);
+    const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
     if (pc.length) {
       pc.forEach((x) => id.appendChild(el('span', 'lrow__comm', (x.p || '未标') + '：' + x.comm)));
-    } else if (nm) {
-      id.appendChild(el('span', 'lrow__comm', nm[2]));
+    } else {
+      id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
+      if (nm) id.appendChild(el('span', 'lrow__comm', nm[2]));
     }
-    if (r.shared || pc.length > 1) {
-      id.appendChild(el('span', 'lrow__meta', r.shared ? '共用码表' : pc.length + ' 个卡头'));
-    }
+    if (r.shared) id.appendChild(el('span', 'lrow__meta', '共用码表'));
+    else if (pc.length > 1) id.appendChild(el('span', 'lrow__meta', pc.length + ' 个卡头'));
     if (r.prev_in !== null && r.prev_in !== undefined) {
       const pv = (r.kind === 'pachinko')
         ? '昨日 投币 ' + fmt(r.prev_in)

@@ -280,6 +280,16 @@ body {
 .lrow:hover { border-color: var(--line-2); }
 .lrow:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
+/* 抄表：一台机一组，组头占整行；卡上只写 P 位 + 通讯ID */
+.entry-group {
+  grid-column: 1 / -1;
+  display: flex; align-items: baseline; gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+.entry-group:first-child { margin-block-start: 0; }
+.entry-group__name { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--ink); }
+.entry-group__n { font-size: var(--text-xs); color: var(--ink-3); }
+
 .lrow__id { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); min-inline-size: 0; }
 .lrow__name { font-size: var(--text-base); font-weight: var(--weight-medium); }
 .lrow__meta { font-size: var(--text-xs); color: var(--ink-3); }
