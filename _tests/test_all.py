@@ -329,6 +329,48 @@ def t_snapshot_per_coin():
     eq(r["p"]["win"], 1100 - 100 * 5, "历史快照不能被新配置改掉")
 
 
+def t_out_only_win():
+    """只计中奖的机器：总出珠就是中奖，不用一币几珠。"""
+    sid = mk_shop("测试店-只计中奖")
+    S.save_brand_flags({"brand": "未", "mode": "swipe_bead_card", "out_incl": False})
+    uid = mk_unit(sid, "未弹珠机-001", brand="未")
+    put_reading(sid, uid, "2026-08-01", in_r=100, p_tokens=500, p_out=300, p_cards=10)
+    put_reading(sid, uid, "2026-08-02", in_r=300, p_tokens=1200, p_out=800, p_cards=40)
+    r, _ = row_of(sid, "2026-08-02", "未弹珠机-001")
+    eq(r["p"]["win"], 500, "只计中奖：中奖出珠 = 总出珠增量")
+    eq(r["p"]["keep"], 200, "实际收珠 = 投珠 700 - 中奖 500")
+
+
+def t_card_and_cost_rate():
+    """出卡率 = 出卡 ÷ 中奖出珠；成本率 = 卡成本 ÷ (实际收珠 × 珠值)。"""
+    sid = mk_shop("测试店-两率")
+    S.save_brand_flags({"brand": "申", "mode": "swipe_bead_card", "out_incl": False})
+    S.save_shop_values({"shop_id": sid, "bead_value": 0.5, "card_value": 0.2})
+    uid = mk_unit(sid, "申弹珠机-001", brand="申")
+    put_reading(sid, uid, "2026-09-01", in_r=100, p_tokens=500, p_out=300, p_cards=10)
+    put_reading(sid, uid, "2026-09-02", in_r=300, p_tokens=1200, p_out=800, p_cards=60)
+    r, _ = row_of(sid, "2026-09-02", "申弹珠机-001")
+    p = r["p"]
+    eq(p["win"], 500, "中奖出珠")
+    eq(p["cards"], 50, "出卡增量")
+    eq(round(p["card_rate"], 4), 0.1, "出卡率 = 50 ÷ 500")
+    # 实际收珠 = 700 − 500 = 200；营收 = 200×0.5 = 100；成本 = 50×0.2 = 10
+    eq(round(p["cost_rate"], 4), 0.1, "成本率 = 10 ÷ 100")
+
+
+def t_rate_blank_when_missing():
+    """没配珠值卡值、或中奖为 0 时，两率留空不报错。"""
+    sid = mk_shop("测试店-两率空")
+    S.save_brand_flags({"brand": "酉", "mode": "swipe_bead_card", "out_incl": False})
+    uid = mk_unit(sid, "酉弹珠机-001", brand="酉")
+    put_reading(sid, uid, "2026-10-01", in_r=100, p_tokens=500, p_out=0, p_cards=5)
+    put_reading(sid, uid, "2026-10-02", in_r=200, p_tokens=600, p_out=0, p_cards=9)
+    r, _ = row_of(sid, "2026-10-02", "酉弹珠机-001")
+    eq(r["p"]["win"], 0, "中奖 0")
+    eq(r["p"]["card_rate"], None, "中奖 0 时出卡率留空")
+    eq(r["p"]["cost_rate"], None, "没配珠值卡值时成本率留空")
+
+
 # ================================================================= 六、取数分流
 def t_manual_skip():
     sid = mk_shop("测试店-纯手工", provider="manual")
@@ -568,6 +610,9 @@ CASES = [
     ("四字段玩法算中奖出珠", t_four_fields_win),
     ("三字段玩法不算中奖出珠", t_three_fields_no_win),
     ("改一币几珠不影响历史", t_snapshot_per_coin),
+    ("只计中奖的机器中奖=总出珠", t_out_only_win),
+    ("出卡率与成本率", t_card_and_cost_rate),
+    ("两率缺值留空", t_rate_blank_when_missing),
     ("纯手工门店不取数", t_manual_skip),
     ("鲸舰取数落机台日汇总", t_jingjian_fetch),
     ("鲸舰按机台名对上上币", t_jingjian_match),

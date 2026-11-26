@@ -588,6 +588,9 @@ def init_db():
             c.execute("ALTER TABLE readings ADD COLUMN unit_snap TEXT")
         if "per_coin_snap" not in rcols:
             c.execute("ALTER TABLE readings ADD COLUMN per_coin_snap REAL")
+        # 总出珠计法快照：1=含首出珠，0=只计中奖；改了品牌开关不改写历史
+        if "out_incl_snap" not in rcols:
+            c.execute("ALTER TABLE readings ADD COLUMN out_incl_snap INTEGER")
         for col in ("p_tokens", "p_out", "p_cards"):
             if col not in rcols:
                 c.execute("ALTER TABLE readings ADD COLUMN %s REAL" % col)
@@ -1044,22 +1047,20 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             d_tokens = delta("p_tokens")
             d_out = delta("p_out")
             d_cards = delta("p_cards")
-            # 码表的「投币」数有两种记法：
-            #   记币 → 投币出珠 = 投币数 × 一币几珠，和宝点上币直接比
-            #   记珠 → 投币数本身就是珠，折成币（÷ 一币几珠）再和宝点上币比
+            # 码表投币一律记币（不再有「记珠」）；一币几珠按门店参数，老数据读快照
             row_shop0 = shop_row(shop_id) or {}
             u_brand = brand_of(u)
-            # 以抄数当时的单位/换率为准；没记过（老数据）才看当前品牌设置
-            m_unit = (rd["unit_snap"] if rd and rd["unit_snap"] else brand_unit(u_brand))
             per_coin = ((rd["per_coin_snap"] if rd and rd["per_coin_snap"] else None)
-                        or brand_per_coin(u_brand) or row_shop0.get("beads_per_coin"))
-            if m_unit == "bead" and per_coin:
-                paid_beads = tin
-                tin_coins = (tin / per_coin) if tin is not None else None
+                        or row_shop0.get("beads_per_coin") or brand_per_coin(u_brand))
+            # 总出珠计法：含首出珠 → 中奖 = 总出珠 − 投币×一币几珠
+            #            只计中奖 → 中奖 = 总出珠（不用一币几珠）
+            snap_incl = rd["out_incl_snap"] if rd and rd["out_incl_snap"] is not None else None
+            out_incl = brand_out_incl(u_brand) if snap_incl is None else bool(snap_incl)
+            paid_beads = (tin * per_coin) if (out_incl and tin is not None and per_coin) else None
+            if out_incl:
+                win = (d_out - paid_beads) if (d_out is not None and paid_beads is not None) else None
             else:
-                paid_beads = (tin * per_coin) if (tin is not None and per_coin) else None
-                tin_coins = tin
-            win = (d_out - paid_beads) if (d_out is not None and paid_beads is not None) else None
+                win = d_out
             keep = (d_tokens - win) if (d_tokens is not None and win is not None) else None
             rate_p = (win / d_tokens) if (win is not None and d_tokens) else None
             row_shop = shop_row(shop_id) or {}
@@ -1068,11 +1069,17 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             profit = None
             if keep is not None and d_cards is not None and bead and cardv:
                 profit = keep * bead - d_cards * cardv
+            # 出卡率 = 出卡 ÷ 中奖出珠；成本率 = 卡成本 ÷ 珠营收（珠营收 = 实际收珠 × 珠值）
+            card_rate = (d_cards / win) if (d_cards is not None and win) else None
+            cost_rate = None
+            if d_cards is not None and cardv and bead and keep and keep > 0:
+                cost_rate = (d_cards * cardv) / (keep * bead)
             p_metrics = {
-                "coins": tin, "coins_norm": tin_coins, "unit": m_unit,
+                "coins": tin, "coins_norm": tin, "unit": DEFAULT_UNIT, "out_incl": out_incl,
                 "per_coin": per_coin, "paid": paid_beads,
                 "tokens": d_tokens, "out": d_out, "cards": d_cards,
                 "win": win, "keep": keep, "rate": rate_p, "profit": profit,
+                "card_rate": card_rate, "cost_rate": cost_rate,
             }
 
         head = None
@@ -1165,20 +1172,25 @@ def save_readings(shop_id: str, day: str, items: list) -> dict:
                                it.get("reason") or "编辑"))
             urow = c.execute("SELECT name, brand, kind FROM units WHERE id=?", (uid,)).fetchone()
             b_key = (urow["brand"] if urow and urow["brand"] else brand_of(dict(urow))) if urow else ""
-            unit_snap = brand_unit(b_key) if (urow and urow["kind"] == "pachinko") else None
-            per_snap = brand_per_coin(b_key) if (urow and urow["kind"] == "pachinko") else None
+            is_p = bool(urow and urow["kind"] == "pachinko")
+            unit_snap = brand_unit(b_key) if is_p else None
+            # 一币几珠现在按门店参数，抄数时连店里的值一起冻结进快照
+            shop_v = shop_row(shop_id) or {}
+            per_snap = ((shop_v.get("beads_per_coin") or brand_per_coin(b_key)) if is_p else None)
+            incl_snap = (1 if brand_out_incl(b_key) else 0) if is_p else None
             c.execute("INSERT INTO readings(shop_id,unit_id,day,in_r,out_r,note,updated_at,"
-                      "p_tokens,p_out,p_cards,unit_snap,per_coin_snap) "
-                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) "
+                      "p_tokens,p_out,p_cards,unit_snap,per_coin_snap,out_incl_snap) "
+                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
                       "ON CONFLICT(shop_id,unit_id,day) DO UPDATE SET "
                       "in_r=excluded.in_r, out_r=excluded.out_r, note=excluded.note, "
                       "updated_at=excluded.updated_at, p_tokens=excluded.p_tokens, "
                       "p_out=excluded.p_out, p_cards=excluded.p_cards, "
                       "unit_snap=COALESCE(readings.unit_snap, excluded.unit_snap), "
-                      "per_coin_snap=COALESCE(readings.per_coin_snap, excluded.per_coin_snap)",
+                      "per_coin_snap=COALESCE(readings.per_coin_snap, excluded.per_coin_snap), "
+                      "out_incl_snap=COALESCE(readings.out_incl_snap, excluded.out_incl_snap)",
                       (shop_id, uid, day, new_in, new_out, it.get("note"), ts,
                        it.get("p_tokens"), it.get("p_out"), it.get("p_cards"),
-                       unit_snap, per_snap))
+                       unit_snap, per_snap, incl_snap))
 
             pv = prev_reading(shop_id, uid, day)
             if pv and new_in is not None and new_in < (pv["in_r"] or 0):
@@ -2196,46 +2208,46 @@ def brand_list(shop_id: str = "") -> list:
     return out
 
 
-METER_UNITS = [("coin", "投币"), ("bead", "投珠")]
 DEFAULT_UNIT = "coin"
 
 
 def brand_unit(brand: str) -> str:
-    """码表那个「投币」数，记的是币还是珠。"""
-    if not brand:
-        return DEFAULT_UNIT
-    with conn() as c:
-        r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
-    if r and r["flags"]:
-        try:
-            u = (json.loads(r["flags"]) or {}).get("unit")
-            if u in dict(METER_UNITS):
-                return u
-        except Exception:
-            pass
+    """码表的「投币」数一律记币，投珠数另有一列，不再有「记珠」这种设置。"""
     return DEFAULT_UNIT
 
 
-def brand_per_coin(brand: str):
-    """这个品牌一币几珠；没配返回 None。"""
+def _brand_json(brand: str) -> dict:
     if not brand:
-        return None
+        return {}
     with conn() as c:
         r = c.execute("SELECT flags FROM brand_flags WHERE brand=?", (brand,)).fetchone()
     if r and r["flags"]:
         try:
-            v = (json.loads(r["flags"]) or {}).get("per_coin")
-            if v:
-                return float(v)
+            return json.loads(r["flags"]) or {}
         except Exception:
             pass
-    return None
+    return {}
+
+
+def brand_out_incl(brand: str) -> bool:
+    """总出珠里是否含「投币换出来的首出珠」。默认含（老机器都是含）。"""
+    v = _brand_json(brand).get("out_incl")
+    return True if v is None else bool(v)
+
+
+def brand_per_coin(brand: str):
+    """一币几珠（老位置，兼容）；现在主配置在门店参数 shops.beads_per_coin。"""
+    v = _brand_json(brand).get("per_coin")
+    try:
+        return float(v) if v else None
+    except Exception:
+        return None
 
 
 def brand_flags(brand: str) -> dict:
     m = brand_mode(brand)
-    return {"mode": m, "fields": MODE_FIELDS[m], "unit": brand_unit(brand),
-            "per_coin": brand_per_coin(brand)}
+    return {"mode": m, "fields": MODE_FIELDS[m], "unit": DEFAULT_UNIT,
+            "out_incl": brand_out_incl(brand), "per_coin": brand_per_coin(brand)}
 
 
 def api_bd_status(q) -> dict:
@@ -2312,8 +2324,13 @@ def api_manage_devices(q) -> dict:
 
 def api_brand_list(q) -> dict:
     sid = (q.get("shop_id") or [""])[0]
-    return {"rows": brand_list(sid), "modes": [[k, l] for k, l, _ in PACHINKO_MODES],
-            "units": METER_UNITS}
+    sh = shop_row(sid) or {}
+    return {"rows": brand_list(sid),
+            "modes": [[k, l] for k, l, _ in PACHINKO_MODES],
+            "shop": {"id": sid, "name": sh.get("name"),
+                     "bead_value": sh.get("bead_value"),
+                     "card_value": sh.get("card_value"),
+                     "beads_per_coin": sh.get("beads_per_coin")}}
 
 
 def api_brand_flags(q) -> dict:
@@ -2345,10 +2362,9 @@ def save_brand_flags(b: dict) -> dict:
     mode = b.get("mode") or DEFAULT_MODE
     if mode not in MODE_FIELDS:
         raise RuntimeError("没有这种玩法")
-    unit = b.get("unit") or DEFAULT_UNIT
-    if unit not in dict(METER_UNITS):
-        raise RuntimeError("码表单位只能是币或珠")
-    per = b.get("per_coin")
+    oi = b.get("out_incl")
+    out_incl = True if oi in (None, "") else str(oi).lower() not in ("0", "false", "no", "off")
+    per = b.get("per_coin")          # 兼容老调用，前端已改到门店参数里填
     try:
         per = float(per) if per not in (None, "", 0, "0") else None
     except Exception:
@@ -2356,7 +2372,7 @@ def save_brand_flags(b: dict) -> dict:
     with conn() as c:
         c.execute("INSERT INTO brand_flags(brand, flags) VALUES(?,?) "
                   "ON CONFLICT(brand) DO UPDATE SET flags=excluded.flags",
-                  (brand, json.dumps({"mode": mode, "unit": unit, "per_coin": per})))
+                  (brand, json.dumps({"mode": mode, "out_incl": out_incl, "per_coin": per})))
     return {"ok": True, "brand": brand, "flags": brand_flags(brand)}
 
 
@@ -2477,15 +2493,23 @@ def manage_machines(shop_id: str) -> list:
 
 
 def save_shop_values(b: dict) -> dict:
-    """弹珠机的珠值 / 卡片价值 / 一币几珠，按店配置。"""
+    """弹珠机的珠值 / 卡值 / 一币几珠，按店配置；留空就是没配。"""
     shop_id = guard_shop(b["shop_id"])
-    bead = b.get("bead_value")
-    card = b.get("card_value")
-    per = b.get("beads_per_coin")
+
+    def num(v):
+        try:
+            f = float(v)
+            return f if f > 0 else None
+        except Exception:
+            return None
+
     with conn() as c:
         c.execute("UPDATE shops SET bead_value=?, card_value=?, beads_per_coin=? WHERE id=?",
-                  (bead, card, per, shop_id))
-    return {"ok": True}
+                  (num(b.get("bead_value")), num(b.get("card_value")),
+                   num(b.get("beads_per_coin")), shop_id))
+    return {"ok": True, "bead_value": num(b.get("bead_value")),
+            "card_value": num(b.get("card_value")),
+            "beads_per_coin": num(b.get("beads_per_coin"))}
 
 
 def save_shop(b: dict) -> dict:

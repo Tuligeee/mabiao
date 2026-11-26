@@ -971,6 +971,13 @@ body[data-scanning="1"] { overflow: hidden; }
 .brand-cfg__n { font-size: var(--text-xs); color: var(--ink-3); }
 .brand-cfg__d { margin: var(--space-1) 0 var(--space-3); font-size: var(--text-xs); color: var(--ink-3); }
 .brand-cfg__row { display: flex; flex-wrap: wrap; gap: var(--space-5); margin-block-end: var(--space-3); }
+/* 门店参数：珠值 / 卡值 / 一币几珠 */
+.brand-cfg__params {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
+  margin: var(--space-3) 0 var(--space-4);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--line);
+}
 .sw { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
 .sw input { inline-size: 1rem; block-size: 1rem; accent-color: var(--accent); }
 .sw__t { font-size: var(--text-sm); color: var(--ink-2); }

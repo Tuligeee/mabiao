@@ -1100,7 +1100,7 @@ function renderRecon() {
   if (!d) return;
   const s = d.summary || {};
   $('reconLede').textContent = d.day + ' · '
-    + (S.kind === 'pachinko' ? '卡头上币 对比 码表投币' : '卡头收币 减 码表收币');
+    + (S.kind === 'pachinko' ? '卡头投币 对比 码表投币' : '卡头收币 减 码表收币');
   $('fDiff').textContent = fmt1(s.diff_ok);
   $('fDiff').dataset.tone = Math.abs(s.diff_ok) >= 1000 ? 'bad' : '';
   $('fMeta').textContent = `${s.ok} 台可核对 · 含异常合计 ${fmt1(s.diff_all)} · 误差超千 ${s.big} 台`;
@@ -1173,6 +1173,8 @@ function renderRecon() {
       const td = el('td', c.cls);
       if (v === null || v === undefined) {
         td.textContent = '-';
+      } else if (c.raw) {
+        td.textContent = String(v);
       } else if (c.cls && c.cls.split(' ').indexOf('num') >= 0) {
         td.textContent = nf.format(v);
       } else {
@@ -1198,6 +1200,8 @@ function reconColumns(rows, pach, mode = 'page') {
   (rows || []).forEach((r) => (r.fields || []).forEach((f) => { uni[f] = 1; }));
   const hasF = (k) => !!uni[k];
   const num = (v) => (v === null || v === undefined || v === '' ? null : Math.round(v));
+  // 比率列自己带 %，不再走 nf.format（那会把 "8.3%" 当数字）
+  const pct = (v) => (v === null || v === undefined ? null : (v * 100).toFixed(1) + '%');
   const pm = (r) => r.p || {};
   // P 位：连着的一组写成 P1–P4，其它情况用斜杠拼
   const poss = (r) => {
@@ -1233,25 +1237,33 @@ function reconColumns(rows, pach, mode = 'page') {
   if (pach) {
     if (hasF('in_r')) {
       cols.push({ key: 'meter_in', label: '码表投币', cls: 'num', text: (r) => num(r.meter_in) });
-      cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
+      cols.push({ key: 'up', label: '卡头投币', cls: 'num', text: (r) => num(r.up) });
     }
     if (hasF('p_tokens')) {
       cols.push({ key: 'tokens', label: '码表投珠', cls: 'num', text: (r) => num(pm(r).tokens) });
     }
+    // 中奖出珠：含首出珠的机器 = 总出珠 − 投币×一币几珠；只计中奖的机器 = 总出珠
     if (hasF('p_out')) {
-      cols.push({ key: 'out', label: '出珠', cls: 'num', text: (r) => num(pm(r).out) });
+      cols.push({ key: 'win', label: '中奖出珠', cls: 'num', text: (r) => num(pm(r).win) });
     }
     if (hasF('p_cards')) {
-      cols.push({ key: 'cards', label: '出卡', cls: 'num', text: (r) => num(pm(r).cards) });
-    }
-    // 中奖出珠 = 出珠 − 投币折成的珠（没有出珠的玩法不显示）
-    if (hasF('p_out') && hasF('in_r')) {
-      cols.push({ key: 'win', label: '中奖出珠', cls: 'num', text: (r) => num(pm(r).win) });
+      cols.push({ key: 'cards', label: '码表出卡', cls: 'num', text: (r) => num(pm(r).cards) });
     }
     cols.push({
       key: 'diff', label: '收币误差', cls: 'num lead', text: (r) => num(r.diff),
       bad: (r) => r.diff !== null && Math.abs(r.diff) >= 1,
     });
+    if (hasF('p_cards') && hasF('p_out')) {
+      cols.push({
+        key: 'card_rate', label: '出卡率', cls: 'num', raw: true,
+        text: (r) => pct(pm(r).card_rate),
+        bad: (r) => pm(r).card_rate !== null && pm(r).card_rate > 1,
+      });
+      cols.push({
+        key: 'cost_rate', label: '成本率', cls: 'num', raw: true,
+        text: (r) => pct(pm(r).cost_rate),
+      });
+    }
   } else {
     if (file) {
       cols.push({ key: 'up', label: '卡头上币', cls: 'num', text: (r) => num(r.up) });
@@ -2010,6 +2022,50 @@ function addMachineForm(kind) {
 
 let BRANDS = null;
 let BRANDS_SHOP = null;
+let BRANDS_SHOP_DATA = null;
+
+// 门店参数：珠值 / 卡值 / 一币几珠 —— 价格按店走，不跟品牌走
+function shopParamsBlock() {
+  const v = BRANDS_SHOP_DATA || {};
+  const box = el('div', 'brand-cfg__params');
+  const mk = (label, key, val, hint) => {
+    const f = el('label', 'machine-cfg__f');
+    f.appendChild(el('span', 'machine-cfg__k', label));
+    const i = el('input', 'input machine-cfg__in');
+    i.type = 'text';
+    i.inputMode = 'decimal';
+    i.value = (val === null || val === undefined) ? '' : String(val);
+    i.placeholder = hint;
+    i.setAttribute('aria-label', label);
+    f.appendChild(i);
+    box.appendChild(f);
+    return i;
+  };
+  const iBead = mk('珠值（元/珠）', 'bead_value', v.bead_value, '留空');
+  const iCard = mk('卡值（元/张）', 'card_value', v.card_value, '留空');
+  const iPer = mk('一币几珠', 'beads_per_coin', v.beads_per_coin, '例 3');
+  const b = el('button', 'btn btn--sm btn--primary', '保存参数');
+  b.type = 'button';
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const r = await api('/api/manage/shop/values', {
+        shop_id: MSHOP.id,
+        bead_value: iBead.value.trim(),
+        card_value: iCard.value.trim(),
+        beads_per_coin: iPer.value.trim(),
+      });
+      BRANDS_SHOP_DATA = { ...(BRANDS_SHOP_DATA || {}), ...r };
+      toast('已保存');
+      if (S.view === 'recon') await loadRecon();
+    } catch (e) {
+      toast(String(e.message || e), 'bad');
+    }
+    b.disabled = false;
+  });
+  box.appendChild(b);
+  return box;
+}
 
 function fillBrandOptions() {
   let dl = $('brandOptions');
@@ -2039,6 +2095,7 @@ async function brandCfg() {
       const d = await api('/api/brand/list?shop_id=' + encodeURIComponent(MSHOP.id));
       BRANDS = d.rows;
       BRANDS_SHOP = MSHOP.id;
+      BRANDS_SHOP_DATA = d.shop || null;
       fillBrandOptions();
     } catch (e) {
       box.appendChild(el('p', 'brand-cfg__sub', String(e.message || e)));
@@ -2048,10 +2105,12 @@ async function brandCfg() {
     box.appendChild(head);
   }
 
+  if (BRANDS_SHOP_DATA) box.appendChild(shopParamsBlock());
+
   const tb = el('table', 'tbl tbl--tight');
   const thead = el('thead');
   const hr = el('tr');
-  ['品牌', '台数', '玩法', '码表显示', '操作'].forEach((t, i) => {
+  ['品牌', '台数', '玩法', '总出珠计法', '操作'].forEach((t, i) => {
     const th = el('th', i === 1 ? 'num' : '', t);
     th.scope = 'col';
     hr.appendChild(th);
@@ -2069,13 +2128,13 @@ async function brandCfg() {
     bUnits.dataset.label = '台数';
     tr.appendChild(bUnits);
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
-      bead_card: '投珠出卡' })[b.mode] || b.mode;
+      bead_card: '投珠出卡', bead_out_card: '投珠出珠出卡' })[b.mode] || b.mode;
     const bMode = el('td', '', modeName);
     bMode.dataset.label = '玩法';
     tr.appendChild(bMode);
-    const bUnit = el('td', '', b.unit === 'bead' ? '投珠' : '投币');
-    bUnit.dataset.label = '码表显示';
-    tr.appendChild(bUnit);
+    const bIncl = el('td', '', b.out_incl === false ? '只计中奖' : '含首出珠');
+    bIncl.dataset.label = '总出珠计法';
+    tr.appendChild(bIncl);
     const td = el('td');
     const b2 = el('button', 'btn btn--sm brand-edit', '编辑');
     b2.type = 'button';
@@ -2110,9 +2169,10 @@ function brandDialog(b) {
     ['swipe_bead_card', '刷卡出珠出卡'],
     ['swipe_card', '刷卡出卡'],
     ['bead_card', '投珠出卡'],
+    ['bead_out_card', '投珠出珠出卡'],
   ];
   let mode = b.mode;
-  let unit = b.unit;
+  let outIncl = b.out_incl === false ? '0' : '1';
 
   const mkGroup = (label, opts, cur, onPick) => {
     dlg.appendChild(el('p', 'brand-cfg__sub', label));
@@ -2143,23 +2203,9 @@ function brandDialog(b) {
   };
 
   mkGroup('玩法', MODES, mode, (v) => { mode = v; });
-  mkGroup('码表显示', [['coin', '投币'], ['bead', '投珠']], unit, (v) => { unit = v; });
-
-  let perCoin = b.per_coin || '';
-  let perWrap = null;
-  if (b.fields && b.fields.indexOf('p_tokens') >= 0) {
-    const pw = el('label', 'machine-cfg__f');
-    pw.appendChild(el('span', 'machine-cfg__k', '一币 = 几珠'));
-    const pi = el('input', 'input machine-cfg__in');
-    pi.type = 'text';
-    pi.inputMode = 'decimal';
-    pi.value = perCoin;
-    pi.placeholder = '20';
-    pi.setAttribute('aria-label', '一币等于几珠');
-    pi.addEventListener('input', () => { perCoin = pi.value.trim(); });
-    pw.appendChild(pi);
-    perWrap = pw;
-  }
+  mkGroup('总出珠计法', [['1', '含首出珠'], ['0', '只计中奖']], outIncl, (v) => { outIncl = v; });
+  dlg.appendChild(el('p', 'brand-cfg__sub',
+    '含首出珠：投币换出的珠也算进总出珠。只计中奖：投币换出的珠不计数，总出珠就是中奖。'));
 
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
@@ -2172,8 +2218,8 @@ function brandDialog(b) {
     save.disabled = true;
     try {
       await api('/api/manage/brand/flags',
-        { brand: b.brand, label: nameIn.value.trim() || b.brand, mode, unit,
-          per_coin: perCoin });
+        { brand: b.brand, label: nameIn.value.trim() || b.brand, mode,
+          out_incl: outIncl });
       BRANDS = null;
       closeBrand();
       await renderUnits();
@@ -2188,7 +2234,6 @@ function brandDialog(b) {
   acts.appendChild(cancel);
   acts.appendChild(save);
   dlg.appendChild(acts);
-  if (perWrap) dlg.insertBefore(perWrap, acts);
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
   save.focus();
