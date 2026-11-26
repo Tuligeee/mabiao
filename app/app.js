@@ -610,16 +610,12 @@ function renderEntry() {
     const id = el('div', 'lrow__id');
     const pc = (r.pcomms || []).filter((x) => x && x.comm);
     const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-    if (isPach) {
-      // 品牌组下面：机台名 + 卡头
-      id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
-    }
+    // 两种机台都带机台名：凤凰城001 P1：671567 / 塔兰弹珠机-001 P1：817879
+    id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
     if (pc.length) {
       pc.forEach((x) => id.appendChild(el('span', 'lrow__comm', (x.p || '未标') + '：' + x.comm)));
-    } else if (!isPach) {
-      // 推币机没有卡头记录：退回机台名/号码
-      id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
-      if (nm) id.appendChild(el('span', 'lrow__comm', nm[2]));
+    } else if (nm) {
+      id.appendChild(el('span', 'lrow__comm', nm[2]));
     }
     if (r.shared) id.appendChild(el('span', 'lrow__meta', '共用码表'));
     else if (pc.length > 1) id.appendChild(el('span', 'lrow__meta', pc.length + ' 个卡头'));
