@@ -1229,6 +1229,13 @@ function renderRecon() {
     const k = keyOf(r);
     counts[k] = (counts[k] || 0) + (pach ? 1 : ((r.comms || []).length || 1));
   });
+  // 共用码表：这台机只抄一份数、几个卡头喂一块表，组头挂个标（和设置页一致）
+  const sharedGroup = new Set();
+  d.rows.forEach((r) => {
+    if (r.shared && (r.comms || []).length > 1 && counts[keyOf(r)] === (r.comms || []).length) {
+      sharedGroup.add(keyOf(r));
+    }
+  });
   let lastGroup = null;
 
   d.rows.forEach((r) => {
@@ -1240,6 +1247,9 @@ function renderRecon() {
       gtd.appendChild(el('span', 'recon-group__name', g));
       gtd.appendChild(el('span', 'recon-group__n',
         pach ? (counts[g] + ' 台') : (counts[g] + ' 个卡头')));
+      if (sharedGroup.has(g)) {
+        gtd.appendChild(el('span', 'recon-group__tag machine__tag machine__tag--shared', '共用码表'));
+      }
       gtr.appendChild(gtd);
       body.appendChild(gtr);
       lastGroup = g;

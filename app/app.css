@@ -915,6 +915,8 @@ body[data-scanning="1"] { overflow: hidden; }
   margin-inline-start: var(--space-2);
   font-size: var(--text-xs); font-weight: var(--weight-regular, 400); color: var(--ink-3);
 }
+/* 共用码表标：跟在本组卡头数后面，和设置页一个样子 */
+.recon-group__tag { margin-inline-start: var(--space-2); vertical-align: 1px; }
 .tbl__pos { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
 
