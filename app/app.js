@@ -1856,25 +1856,9 @@ async function openBdSync(btn) {
   });
   box.appendChild(tbl);
 
+  // 没认出来的宝点分组只在接口数据里留着，界面不显示（用户要求去掉这个框）
   if ((d.orphan || []).length) {
-    const unknown = d.unknown || [];
-  if (unknown.length) {
-    const boxU = el('div');
-    boxU.style.cssText = 'margin:12px 0 4px;padding:10px 12px;border-radius:8px;'
-      + 'background:#fff8e6;border:1px solid #f0d9a8;font-size:13px;line-height:1.7';
-    boxU.appendChild(el('div', null, '这些分组没认出来，没算进同步（宝点「项目分组」里新建的子分组要告诉我一声）：'));
-    const ul = el('ul');
-    ul.style.cssText = 'margin:4px 0 0;padding-inline-start:18px';
-    unknown.forEach((u) => {
-      ul.appendChild(el('li', null, u.team + ' · ' + (u.machines || []).length
-        + ' 台（' + (u.machines || []).slice(0, 3).join('、')
-        + ((u.machines || []).length > 3 ? '…' : '') + '）'));
-    });
-    boxU.appendChild(ul);
-    box.appendChild(boxU);
-  }
-
-  box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
+    box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
       + d.orphan.map((x) => x.name).join('、')));
   }
 
