@@ -291,13 +291,7 @@ body {
 
 .lrow__inputs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 
-/* 每台机的拍照凭证：缩略图 + 拍照/重拍 */
-.pic { display: flex; align-items: center; gap: var(--space-2); margin-block-start: var(--space-2); }
-.pic__img {
-  inline-size: 44px; block-size: 44px; object-fit: cover;
-  border-radius: var(--radius-sm); border: 1px solid var(--line);
-}
-.pic__btn { font-size: var(--text-xs); block-size: 32px; padding-inline: var(--space-3); }
+/* 每台机的拍照凭证：样式在文件末尾「拍照与看大图」一节统一维护 */
 .cell {
   display: grid; grid-template-columns: auto 1fr; align-items: center;
   column-gap: var(--space-2); row-gap: var(--space-0.5); min-inline-size: 0;
@@ -1352,3 +1346,66 @@ body[data-scanning="1"] { overflow: hidden; }
 }
 .reset-btn:hover { background: var(--hover); }
 .reset-btn[data-on="true"] { border-style: solid; color: var(--ok); border-color: var(--ok); }
+
+/* ---------------------------------------------------------------- 拍照与看大图 */
+.pic { display: flex; align-items: center; gap: var(--space-2); margin-block-start: var(--space-2); }
+.pic__thumb {
+  position: relative; padding: 0; background: transparent; cursor: pointer;
+  inline-size: 48px; block-size: 48px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong); overflow: hidden;
+}
+.pic__thumb[data-has="true"] { border-style: solid; border-color: var(--line); }
+.pic__img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+.pic__badge {
+  position: absolute; inset-inline-end: 2px; inset-block-end: 2px;
+  min-inline-size: 16px; block-size: 16px; padding-inline: 3px; border-radius: 8px;
+  background: rgba(0,0,0,.65); color: #fff; font-size: 10px; line-height: 16px; text-align: center;
+}
+.pic__btn { font-size: var(--text-xs); block-size: 32px; padding-inline: var(--space-3); }
+
+.pic-chip {
+  margin-inline-start: var(--space-2); padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--hover); color: var(--ink-3);
+  font-size: 11px; cursor: pointer;
+}
+.pic-chip[data-has="true"] { color: var(--ink-1); border-color: var(--line-strong); }
+.pic-chip:disabled { cursor: default; opacity: .6; }
+
+.vw { position: fixed; inset: 0; z-index: 90; background: rgba(15,17,21,.72); display: grid; place-items: center; }
+.vw__box {
+  position: relative; padding: 12px; background: #fff; border-radius: var(--radius-lg);
+  inline-size: min(1200px, calc(100vw - 48px)); block-size: min(858px, calc(100vh - 48px));
+  display: grid; place-items: center;
+}
+.vw__stage { inline-size: 100%; block-size: 100%; display: grid; place-items: center; overflow: hidden; }
+.vw__img { max-inline-size: 100%; max-block-size: 100%; display: block; }
+.vw__count {
+  position: absolute; inset-block-end: 14px; inset-inline-start: 50%; transform: translateX(-50%);
+  padding: 4px 14px; border-radius: 999px; background: rgba(0,0,0,.06);
+  font-size: 13px; color: var(--ink-2);
+}
+.vw__nav {
+  position: absolute; inset-block-start: 50%; transform: translateY(-50%);
+  inline-size: 48px; block-size: 48px; border: 0; border-radius: 50%;
+  background: rgba(0,0,0,.35); color: #fff; font-size: 26px; cursor: pointer;
+}
+.vw__nav--prev { inset-inline-start: 16px; }
+.vw__nav--next { inset-inline-end: 16px; }
+.vw__close {
+  position: absolute; inset-block-start: 8px; inset-inline-end: 8px;
+  inline-size: 36px; block-size: 36px; border-radius: 50%;
+  border: 1px solid var(--line); background: #fff; font-size: 20px; cursor: pointer;
+}
+.vw__dl { position: absolute; inset-block-end: 14px; inset-inline-end: 16px; font-size: 13px; color: var(--ink-2); }
+
+@media (max-width: 47.99em) {
+  .vw { background: #000; }
+  .vw__box { inline-size: 100vw; block-size: 100vh; padding: 0; border-radius: 0; background: #000; }
+  .vw__img { max-inline-size: 100vw; max-block-size: 100vh; }
+  .vw__close { color: #fff; background: rgba(255,255,255,.12); border-color: transparent; }
+  .vw__count { inset-block-end: 84px; background: rgba(255,255,255,.12); color: #fff; }
+  .vw__dl {
+    inset-block-end: 24px; inset-inline: auto; inset-inline-start: 50%; transform: translateX(-50%);
+    padding: 10px 22px; border-radius: 999px; background: #fff; color: #111;
+  }
+}

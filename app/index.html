@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>码表核对</title>
 <link rel="stylesheet" href="theme.css?v=111">
-<link rel="stylesheet" href="app.css?v=115">
+<link rel="stylesheet" href="app.css?v=116">
 </head>
 <body>
 <a class="skip" href="#main">跳到主内容</a>
@@ -139,8 +139,9 @@
       </div>
 
       <div class="savebar">
-        <button class="btn btn--primary" type="button" id="btnSave">取数</button>
-        <p class="savebar__hint" id="saveHint">次日自动出核对结果</p>
+        <button class="btn" type="button" id="btnSave">保存</button>
+        <button class="btn btn--primary" type="button" id="btnSubmit" disabled>提交</button>
+        <p class="savebar__hint" id="saveHint">填完并拍完照才能提交</p>
       </div>
     </section>
 
@@ -155,7 +156,6 @@
           <button class="seg__b" type="button" role="tab" data-kind="pachinko">弹珠机</button>
         </div>
         <button class="btn btn--sm recon-export" type="button" id="btnExport">导出表格</button>
-        <button class="btn btn--sm btn--quiet" type="button" id="btnFreeze" hidden></button>
       </div>
 
       <div class="card">
@@ -269,9 +269,10 @@
 
 <script src="vendor/jsQR.js"></script>
   <script src="ui.js?v=111"></script>
-<script src="app.js?v=115"></script>
+<script src="app.js?v=116"></script>
 </body>
 </html>
+
 
 
 

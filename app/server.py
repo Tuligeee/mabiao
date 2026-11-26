@@ -251,6 +251,18 @@ def is_store() -> bool:
     return bool(a and a.get("type") == "store")
 
 
+def one(v) -> str:
+    """参数取值：可能是字符串，也可能是列表（query 是列表，JSON body 是字符串）。
+
+    以前统一写 `(x or [""])[0]`，遇到字符串就只取第一个字符 ——
+    鄂州店扫码后存成了 `meter-3.json` 而不是 `meter-3be437fd-….json`，
+    于是「扫完还是宝点登录」（2026-11-26 踩过）。
+    """
+    if isinstance(v, (list, tuple)):
+        return str(v[0]) if v else ""
+    return str(v or "")
+
+
 def guard_shop(shop_id: str) -> str:
     """门店身份只能碰自己的店；总部放行。"""
     a = actor()
@@ -527,7 +539,8 @@ CREATE TABLE IF NOT EXISTS card_daily(
 -- 码表照片：店长抄表时拍的凭证，只留 45 天
 CREATE TABLE IF NOT EXISTS photos(
   id TEXT PRIMARY KEY, shop_id TEXT, unit_id INTEGER, day TEXT,
-  path TEXT, bytes INTEGER, w INTEGER, h INTEGER, at TEXT, by TEXT);
+  path TEXT, bytes INTEGER, w INTEGER, h INTEGER, at TEXT, by TEXT,
+  expired INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 """
 
@@ -582,6 +595,9 @@ def init_db():
         for col in ("bead_value", "card_value"):
             if col not in scols:
                 c.execute("ALTER TABLE shops ADD COLUMN %s REAL" % col)
+        pcols = [r["name"] for r in c.execute("PRAGMA table_info(photos)")]
+        if "expired" not in pcols:
+            c.execute("ALTER TABLE photos ADD COLUMN expired INTEGER DEFAULT 0")
 
 
 def meta_get(k, default=None):
@@ -981,6 +997,11 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         # 卡头ID 按 P 位排（P1 在前），和墙上/Excel 的顺序对得上
         cno = {r["comm_id"]: (r["console_no"] or "") for r in c.execute(
             "SELECT comm_id, console_no FROM comms")}
+        # 当天的照片张数（核对页要能点开看）
+        ph = {}
+        for r in c.execute("SELECT unit_id, COUNT(*) n, MAX(expired) ex FROM photos "
+                           "WHERE shop_id=? AND day=? GROUP BY unit_id", (shop_id, day)):
+            ph[r["unit_id"]] = {"n": r["n"], "expired": bool(r["ex"])}
 
     rows = []
     for u in units:
@@ -1096,6 +1117,8 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "prev_in": pv["in_r"] if pv else None, "prev_out": pv["out_r"] if pv else None,
             "note": rd["note"] if rd else None,
             "reset": bool(reset),
+            "photos": ph.get(u["id"], {}).get("n", 0),
+            "photos_expired": bool(ph.get(u["id"], {}).get("expired")),
             "reason": (notes.get(u["id"]) or {}).get("reason"),
             "reason_note": (notes.get(u["id"]) or {}).get("note"),
         })
@@ -1174,9 +1197,12 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
         have_card = {r["comm_id"] for r in
                      c.execute("SELECT comm_id FROM card_daily WHERE shop_id=? AND day=?",
                                (shop_id, day))}
-        pics = {r["unit_id"]: dict(r) for r in
-                c.execute("SELECT id, unit_id, at FROM photos WHERE shop_id=? AND day=?",
-                          (shop_id, day))}
+        pics = {}
+        for r in c.execute("SELECT id, unit_id, at, w, h, expired FROM photos "
+                           "WHERE shop_id=? AND day=? ORDER BY at", (shop_id, day)):
+            pics.setdefault(r["unit_id"], []).append(
+                {"id": r["id"], "at": r["at"], "w": r["w"], "h": r["h"],
+                 "expired": bool(r["expired"])})
     rows = []
     for u in units:
         rd = reads.get(u["id"])
@@ -1203,8 +1229,7 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "prev_out_total": pv["p_out"] if pv else None,
             "prev_cards": pv["p_cards"] if pv else None,
             "note": rd["note"] if rd else None,
-            "photo": (pics.get(u["id"]) or {}).get("id"),
-            "photo_at": (pics.get(u["id"]) or {}).get("at"),
+            "photos": pics.get(u["id"]) or [],
         })
     return {"day": day, "rows": rows,
             "confirmed": bool(shop.get("units_confirmed")),
@@ -1213,29 +1238,28 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
 
 # ---------------------------------------------------------------- 码表照片
 PHOTO_DIR = DATA / "photos"
-PHOTO_KEEP_DAYS = 45          # 一个半月
+PHOTO_KEEP_DAYS = 30          # 按上传时间留 30 天
 PHOTO_MAX_BYTES = 3 * 1024 * 1024
 
 
-def photo_expire_day(today: str | None = None) -> str:
-    d = date.fromisoformat(today) if today else date.today()
-    return (d - timedelta(days=PHOTO_KEEP_DAYS)).isoformat()
+def photo_cutoff() -> str:
+    return (datetime.now() - timedelta(days=PHOTO_KEEP_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def cleanup_photos() -> int:
-    """删掉超过 45 天的照片（文件 + 记录），返回删了几张。"""
-    cut = photo_expire_day()
+    """上传满 30 天的照片：删文件、留一行记录，页面显示「照片已过期」。"""
+    cut = photo_cutoff()
     n = 0
-    if not PHOTO_DIR.is_dir():
-        return 0
     with conn() as c:
-        old = [dict(r) for r in c.execute("SELECT id, path FROM photos WHERE day < ?", (cut,))]
+        old = [dict(r) for r in c.execute(
+            "SELECT id, path FROM photos WHERE expired=0 AND at < ?", (cut,))]
         for r in old:
-            try:
-                (PHOTO_DIR / r["path"]).unlink()
-            except OSError:
-                pass
-            c.execute("DELETE FROM photos WHERE id=?", (r["id"],))
+            if r["path"]:
+                try:
+                    (PHOTO_DIR / r["path"]).unlink()
+                except OSError:
+                    pass
+            c.execute("UPDATE photos SET path='', expired=1 WHERE id=?", (r["id"],))
             n += 1
     # 顺手清掉空目录
     try:
@@ -1248,7 +1272,7 @@ def cleanup_photos() -> int:
 
 
 def photo_gc_loop():
-    """每 6 小时扫一次，保证「一个半月」不靠有人上传才执行。"""
+    """每 6 小时扫一次，保证「30 天」不靠有人上传才执行。"""
     while True:
         time.sleep(6 * 3600)
         try:
@@ -1259,6 +1283,7 @@ def photo_gc_loop():
 
 def save_photo(shop_id: str, unit_id: int, day: str, data_b64: str,
                w=None, h=None) -> dict:
+    """一块码表一天可以拍多张，逐张追加。"""
     import base64
     sid = guard_shop(shop_id)
     with conn() as c:
@@ -1284,35 +1309,44 @@ def save_photo(shop_id: str, unit_id: int, day: str, data_b64: str,
 
     ts = now()
     with conn() as c:
-        # 同一天同一台只留一张，重拍就替换
-        for o in [dict(r) for r in c.execute(
-                "SELECT id, path FROM photos WHERE shop_id=? AND unit_id=? AND day=?",
-                (sid, unit_id, day))]:
-            try:
-                (PHOTO_DIR / o["path"]).unlink()
-            except OSError:
-                pass
-            c.execute("DELETE FROM photos WHERE id=?", (o["id"],))
-        c.execute("INSERT INTO photos(id,shop_id,unit_id,day,path,bytes,w,h,at,by) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        c.execute("INSERT INTO photos(id,shop_id,unit_id,day,path,bytes,w,h,at,by,expired) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,0)",
                   (pid, sid, unit_id, day, rel, len(raw), w, h, ts,
                    (actor() or {}).get("name") or "?"))
         c.execute("INSERT INTO audit(ts,shop_id,day,unit_id,field,old_v,new_v,note) "
                   "VALUES(?,?,?,?,?,?,?,?)",
                   (ts, sid, day, unit_id, "photo", None, len(raw), "上传码表照片"))
     cleanup_photos()
-    return {"id": pid, "bytes": len(raw)}
+    return {"id": pid, "bytes": len(raw), "at": ts}
+
+
+def api_photos(q) -> dict:
+    """某台机某天的全部照片（核对页点开看大图用）。"""
+    sid = guard_shop((q.get("shop_id") or [""])[0])
+    day = (q.get("day") or [""])[0]
+    try:
+        uid = int((q.get("unit_id") or ["0"])[0])
+    except ValueError:
+        uid = 0
+    with conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT id, at, w, h, expired FROM photos "
+            "WHERE shop_id=? AND unit_id=? AND day=? ORDER BY at", (sid, uid, day))]
+    return {"photos": [{"id": r["id"], "at": r["at"],
+                        "expired": bool(r["expired"])} for r in rows]}
 
 
 def photo_bytes(photo_id: str) -> bytes:
     with conn() as c:
         r = c.execute("SELECT * FROM photos WHERE id=?", (photo_id,)).fetchone()
     if not r:
-        raise RuntimeError("照片不存在，可能已经过期清理")
+        raise RuntimeError("照片不存在")
     guard_shop(r["shop_id"])
+    if r["expired"] or not r["path"]:
+        raise RuntimeError("照片已过期")
     p = PHOTO_DIR / r["path"]
     if not p.is_file():
-        raise RuntimeError("照片文件已经清理")
+        raise RuntimeError("照片已过期")
     return p.read_bytes()
 
 
@@ -1537,6 +1571,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_entry(q))
             if p == "/api/photo":
                 return self._send(200, photo_bytes((q.get("id") or [""])[0]), "image/jpeg")
+            if p == "/api/photos":
+                return self._send(200, api_photos(q))
             if p == "/api/bd/status":
                 return self._send(200, api_bd_status(q))
             if p == "/api/manage/devices":
@@ -2203,7 +2239,7 @@ def brand_flags(brand: str) -> dict:
 
 
 def api_bd_status(q) -> dict:
-    sid = (q.get("shop_id") or [""])[0]
+    sid = one(q.get("shop_id"))
     if not sid:
         try:
             sid = resolve_shop(actor()) or ""
@@ -2214,7 +2250,7 @@ def api_bd_status(q) -> dict:
 
 def api_bd_start(b: dict) -> dict:
     """生成一个宝点登录二维码，扫完会另存成码表专用会话。"""
-    sid = guard_shop((b.get("shop_id") or [""])[0] or (resolve_shop(actor()) or ""))
+    sid = guard_shop(one(b.get("shop_id")) or (resolve_shop(actor()) or ""))
     r = bd_call("/api/start", {"sys": "baodian", "wait": 2, "key": "meter-" + sid})
     if not r.get("ok"):
         raise RuntimeError(r.get("error") or "生成二维码失败")
@@ -2226,13 +2262,13 @@ def api_bd_poll(b: dict) -> dict:
     sid = (b.get("sid") or "").strip()
     if not sid:
         raise RuntimeError("缺 sid")
-    shop_id = guard_shop((b.get("shop_id") or [""])[0] or (resolve_shop(actor()) or ""))
+    shop_id = guard_shop(one(b.get("shop_id")) or (resolve_shop(actor()) or ""))
     r = bd_call("/api/status", {"sid": sid, "key": "meter-" + shop_id})
     out = {"ok": bool(r.get("ok")), "state": r.get("state") or "",
            "error": r.get("error") or "", "err": r.get("err") or ""}
     if r.get("state") == "ok" and out["ok"]:
         reset_baodian()
-        out.update(bd_alive())
+        out.update(bd_alive(shop_id))
     return out
 
 
@@ -2812,6 +2848,8 @@ def api_recon_range(q) -> dict:
                 "diff": row["diff"],
                 "rate": row["rate"],
                 "status": row["status"],
+                "photos": row.get("photos", 0),
+                "photos_expired": row.get("photos_expired", False),
                 "reason": row.get("reason"),
                 "reason_note": row.get("reason_note"),
             })

@@ -288,7 +288,7 @@ async function loadScan(code, id) {
       inputs.appendChild(makeCell(r, 'out_r', '出', 'prev_out', noop));
     }
     card.appendChild(inputs);
-    card.appendChild(photoBox(r, d.shop.id, d.day));
+    card.appendChild(photoBox(r, d.shop.id, d.day, d.shop.name));
     wrap.appendChild(card);
   });
 
@@ -321,8 +321,6 @@ async function saveScan(btn) {
       p_tokens: r.p_tokens, p_out: r.p_out, p_cards: r.p_cards,
     }));
   if (!items.length) { toast('还没填数', 'bad'); return; }
-  const miss = firstMissingPhoto(S.scan.rows.filter(hasReading));
-  if (miss) { toast('先给这台拍张照片', 'bad'); return; }
   btn.disabled = true;
   try {
     await api('/api/entry', { shop_id: S.scan.shop.id, day: S.scan.day, items });
@@ -507,7 +505,7 @@ function renderEntry() {
       inputs.appendChild(makeCell(r, 'out_r', '出', 'prev_out'));
     }
     li.appendChild(inputs);
-    li.appendChild(photoBox(r, S.shopId, S.day));
+    li.appendChild(photoBox(r, S.shopId, S.day, shopName()));
 
     ul.appendChild(li);
   });
@@ -549,13 +547,20 @@ function updateProgress() {
     t.dataset.on = i < filled ? 'true' : 'false';
   });
   $('btnSave').disabled = filled === 0;
-  const lacking = S.entry.filter((r) => hasReading(r) && !r.photo).length;
+  const noPic = S.entry.filter((r) => r.active !== false
+    && !(r.photos && r.photos.some((p) => !p.expired))).length;
+  const allFilled = filled === total && total > 0;
+  const canSubmit = allFilled && noPic === 0;
+  const sub = $('btnSubmit');
+  if (sub) sub.disabled = !canSubmit;
   $('saveHint').textContent = filled === 0
     ? '先填至少一台'
-    : (lacking
-      ? '还差 ' + lacking + ' 张照片'
-      : (filled === total ? '都填完了' : '还剩 ' + (total - filled) + ' 台'));
-  $('btnToRecon').hidden = filled < total || total === 0;
+    : (!allFilled
+      ? '还剩 ' + (total - filled) + ' 台没填'
+      : (noPic
+        ? '还差 ' + noPic + ' 台没拍照'
+        : '都填完了，可以提交'));
+  $('btnToRecon').hidden = !canSubmit;
 }
 
 function makeCell(row, field, label, prevField, onChange) {
@@ -616,7 +621,7 @@ function hasReading(r) {
     || r.p_out !== null || r.p_cards !== null;
 }
 
-function compressImage(file) {
+function compressImage(file, stamp) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -626,7 +631,9 @@ function compressImage(file) {
       const cv = document.createElement('canvas');
       cv.width = Math.round(img.width * scale);
       cv.height = Math.round(img.height * scale);
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const g = cv.getContext('2d');
+      g.drawImage(img, 0, 0, cv.width, cv.height);
+      if (stamp) drawStamp(g, cv.width, cv.height, stamp);
       cv.toBlob((b) => (b
         ? resolve({ blob: b, w: cv.width, h: cv.height })
         : reject(new Error('压缩失败，重拍一张'))), 'image/jpeg', PHOTO_QUALITY);
@@ -634,6 +641,36 @@ function compressImage(file) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('这张图读不了，重拍一张')); };
     img.src = url;
   });
+}
+
+// 左下角水印：上行「门店 · 机台 · P位」，下行日期时间
+function drawStamp(g, w, h, stamp) {
+  const big = Math.round(w * 0.045);
+  const small = Math.round(w * 0.032);
+  const pad = Math.round(w * 0.03);
+  g.textBaseline = 'alphabetic';
+  g.lineWidth = Math.max(2, Math.round(big * 0.12));
+  g.strokeStyle = 'rgba(0,0,0,.55)';
+  g.fillStyle = '#fff';
+  let y = h - pad - small * 1.4;
+  g.font = '600 ' + big + 'px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  g.strokeText(stamp.title, pad, y);
+  g.fillText(stamp.title, pad, y);
+  y += Math.round(small * 1.6);
+  g.font = '400 ' + small + 'px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  g.strokeText(stamp.time, pad, y);
+  g.fillText(stamp.time, pad, y);
+}
+
+function stampNow(row, poi) {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const when = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+    + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  const nm = String(row.name || '').replace(/\s+\d{5,}$/, '');
+  const bits = [poi, nm];
+  if (row.pos) bits.push('P' + row.pos);
+  return { title: bits.filter(Boolean).join(' · '), time: when };
 }
 
 function blobToBase64(blob) {
@@ -658,42 +695,64 @@ async function loadPhoto(id) {
   return url;
 }
 
-async function uploadPhoto(shopId, day, row, file) {
-  const { blob, w, h } = await compressImage(file);
+async function uploadPhoto(shopId, day, row, file, poi) {
+  const { blob, w, h } = await compressImage(file, stampNow(row, poi));
   const data = await blobToBase64(blob);
   const d = await api('/api/photo', {
     shop_id: shopId, day, unit_id: row.unit_id, data, w, h,
   });
-  row.photo = d.id;
-  const url = URL.createObjectURL(blob);
+  row.photos = row.photos || [];
+  row.photos.push({ id: d.id, at: d.at });
   S.photoUrls = S.photoUrls || {};
-  S.photoUrls[d.id] = url;
-  return { url, bytes: d.bytes };
+  S.photoUrls[d.id] = URL.createObjectURL(blob);
+  return d;
 }
 
-function photoBox(row, shopId, day) {
+// 每台机：缩略图（点开看大图）+ 拍照按钮；一块码表一天可以拍多张
+function photoBox(row, shopId, day, poi) {
   const box = el('div', 'pic');
+  row.photos = row.photos || [];
+
+  const thumb = el('button', 'pic__thumb');
+  thumb.type = 'button';
   const img = el('img', 'pic__img');
   img.alt = row.name + ' 的码表照片';
   img.hidden = true;
-  img.loading = 'lazy';
-  const btn = el('button', 'btn btn--quiet pic__btn', row.photo ? '重拍' : '拍照');
+  const badge = el('span', 'pic__badge');
+
+  const btn = el('button', 'btn btn--quiet pic__btn', row.photos.length ? '加一张' : '拍照');
   btn.type = 'button';
 
   const file = document.createElement('input');
   file.type = 'file';
   file.accept = 'image/*';
-  file.capture = 'environment';     // 只让拍照，不从相册挑
+  file.capture = 'environment';     // 手机上只让拍，不从相册挑
   file.hidden = true;
 
-  const show = (url) => {
-    if (!url) return;
-    img.src = url;
-    img.hidden = false;
-    box.dataset.has = 'true';
-    btn.textContent = '重拍';
+  const paint = () => {
+    const live = row.photos.filter((p) => !p.expired);
+    const last = live[live.length - 1];
+    if (!last) {
+      img.hidden = true;
+      badge.hidden = true;
+      btn.textContent = '拍照';
+      return;
+    }
+    thumb.dataset.has = 'true';
+    btn.textContent = '加一张';
+    badge.hidden = live.length < 2;
+    badge.textContent = String(live.length);
+    loadPhoto(last.id).then((u) => { if (u) { img.src = u; img.hidden = false; } }).catch(() => {});
   };
-  if (row.photo) loadPhoto(row.photo).then(show).catch(() => {});
+  paint();
+
+  thumb.addEventListener('click', () => {
+    const live = row.photos.filter((p) => !p.expired);
+    if (!live.length) { file.click(); return; }
+    openViewer(live, live.length - 1, row.name);
+  });
+  thumb.appendChild(img);
+  thumb.appendChild(badge);
 
   btn.addEventListener('click', () => file.click());
   file.addEventListener('change', async () => {
@@ -701,27 +760,101 @@ function photoBox(row, shopId, day) {
     file.value = '';
     if (!f) return;
     btn.disabled = true;
+    const old = btn.textContent;
     btn.textContent = '上传中';
     try {
-      const out = await uploadPhoto(shopId, day, row, f);
-      show(out.url);
+      await uploadPhoto(shopId, day, row, f, poi);
+      paint();
+      if (typeof updateProgress === 'function') updateProgress();
       toast('照片已存');
     } catch (e) {
       toast(String(e.message || e), 'bad');
-      btn.textContent = row.photo ? '重拍' : '拍照';
+      btn.textContent = old;
     } finally {
       btn.disabled = false;
     }
   });
 
-  box.appendChild(img);
+  box.appendChild(thumb);
   box.appendChild(btn);
   box.appendChild(file);
   return box;
 }
 
-function firstMissingPhoto(rows) {
-  return rows.find((r) => hasReading(r) && !r.photo) || null;
+/* ------------------------------------------------------------ 看大图 */
+let _viewer = null;
+
+function openViewer(list, start, title) {
+  const items = (list || []).filter((x) => x && !x.expired);
+  if (!items.length) { toast('照片已过期'); return; }
+  if (_viewer) { _viewer.remove(); _viewer = null; }
+  let idx = Math.min(Math.max(0, start | 0), items.length - 1);
+
+  const root = el('div', 'vw');
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  const box = el('div', 'vw__box');
+  const stage = el('div', 'vw__stage');
+  const img = el('img', 'vw__img');
+  const counter = el('div', 'vw__count');
+  const prev = el('button', 'vw__nav vw__nav--prev', '‹');
+  const next = el('button', 'vw__nav vw__nav--next', '›');
+  const close = el('button', 'vw__close', '×');
+  close.setAttribute('aria-label', '关闭');
+  const dl = el('a', 'vw__dl', '保存到相册');
+  dl.download = (title || 'meter') + '.jpg';
+
+  prev.type = 'button'; next.type = 'button';
+
+  const show = async (n) => {
+    idx = n;
+    counter.textContent = (n + 1) + ' / ' + items.length;
+    prev.disabled = n <= 0;
+    next.disabled = n >= items.length - 1;
+    img.removeAttribute('src');
+    stage.dataset.loading = 'true';
+    const u = await loadPhoto(items[n].id).catch(() => null);
+    stage.dataset.loading = 'false';
+    if (u) { img.src = u; dl.href = u; }
+  };
+  prev.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) show(idx - 1); });
+  next.addEventListener('click', (e) => { e.stopPropagation(); if (idx < items.length - 1) show(idx + 1); });
+  close.addEventListener('click', (e) => { e.stopPropagation(); done(); });
+  root.addEventListener('click', (e) => { if (e.target === root || e.target === box) done(); });
+  const onKey = (e) => {
+    if (e.key === 'Escape') done();
+    if (e.key === 'ArrowLeft' && idx > 0) show(idx - 1);
+    if (e.key === 'ArrowRight' && idx < items.length - 1) show(idx + 1);
+  };
+  document.addEventListener('keydown', onKey);
+  const done = () => {
+    document.removeEventListener('keydown', onKey);
+    root.remove();
+    _viewer = null;
+    document.body.style.overflow = '';
+  };
+
+  if (items.length > 1) { box.appendChild(prev); box.appendChild(next); }
+  box.appendChild(stage);
+  box.appendChild(counter);
+  box.appendChild(close);
+  box.appendChild(dl);
+  stage.appendChild(img);
+  root.appendChild(box);
+  document.body.appendChild(root);
+  document.body.style.overflow = 'hidden';
+  _viewer = root;
+  show(idx);
+}
+
+async function openDayPhotos(r) {
+  try {
+    const d = await api('/api/photos?shop_id=' + encodeURIComponent(S.shopId)
+      + '&day=' + encodeURIComponent(S.day) + '&unit_id=' + encodeURIComponent(r.unit_id));
+    openViewer(d.photos || [], 0, r.name);
+  } catch (e) {
+    toast(String(e.message || e), 'bad');
+  }
 }
 
 function refreshNote() {
@@ -734,46 +867,75 @@ function refreshNote() {
   $('noteD').textContent = bad.map((r) => r.name).join('、') + '。保存后在核对里标成待确认。';
 }
 
-async function saveAndFetch() {
-  const btn = $('btnSave');
-  btn.textContent = S.provider === 'manual' ? '保存' : '取数';
-  const items = S.entry
-    .filter((r) => r.in_r !== null || r.out_r !== null || r.p_tokens !== null
-      || r.p_out !== null || r.p_cards !== null)
-    .map((r) => ({
-      unit_id: r.unit_id, in_r: r.in_r, out_r: r.out_r,
-      p_tokens: r.p_tokens, p_out: r.p_out, p_cards: r.p_cards,
-    }));
-  if (!items.length) { toast('还没填读数', 'bad'); return; }
-  const miss = firstMissingPhoto(S.entry.filter(hasReading));
-  if (miss) {
-    toast(miss.name + ' 还没拍照', 'bad');
-    focusUnit(miss.unit_id);
-    return;
-  }
+function shopName() {
+  const s = (S.shops || []).find((x) => x.id === S.shopId);
+  return s ? s.name : '';
+}
 
-  btn.dataset.loading = 'true';
+function filledItems(rows) {
+  return rows.filter(hasReading).map((r) => ({
+    unit_id: r.unit_id, in_r: r.in_r, out_r: r.out_r,
+    p_tokens: r.p_tokens, p_out: r.p_out, p_cards: r.p_cards,
+  }));
+}
+
+/* 保存 = 暂存，不取宝点数据；提交 = 存完再取数（= 以前的「取数」） */
+async function saveDraft(btn) {
+  const items = filledItems(S.entry);
+  if (!items.length) { toast('还没填读数', 'bad'); return false; }
+  const old = btn.textContent;
   btn.disabled = true;
-  $('saveHint').textContent = '保存中';
+  btn.textContent = '保存中';
   try {
     const res = await api('/api/entry', { shop_id: S.shopId, day: S.day, items });
+    $('saveHint').textContent = '已暂存 ' + res.saved + ' 台，还没提交';
+    toast('已保存');
+    return true;
+  } catch (e) {
+    toast(String(e.message || e), 'bad');
+    return false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+    updateProgress();
+  }
+}
+
+async function submitDay(btn) {
+  const rows = S.entry.filter((r) => r.active !== false);
+  const lack = rows.filter((r) => !hasReading(r));
+  if (lack.length) {
+    toast('还有 ' + lack.length + ' 台没填', 'bad');
+    focusUnit(lack[0].unit_id);
+    return;
+  }
+  const noPic = rows.filter((r) => !(r.photos && r.photos.some((p) => !p.expired)));
+  if (noPic.length) {
+    toast(noPic[0].name + ' 还没拍照', 'bad');
+    focusUnit(noPic[0].unit_id);
+    return;
+  }
+  btn.disabled = true;
+  $('saveHint').textContent = '提交中';
+  try {
+    await api('/api/entry', { shop_id: S.shopId, day: S.day, items: filledItems(rows) });
     if (S.provider === 'manual') {
-      $('saveHint').textContent = '已保存 ' + res.saved + ' 台';
-      toast('已保存');
+      $('saveHint').textContent = '已提交';
+      toast('已提交');
       setView('recon');
       return;
     }
-    $('saveHint').textContent = '已存 ' + res.saved + ' 台，正在取数';
+    $('saveHint').textContent = '已存 ' + rows.length + ' 台，正在取数';
     await api('/api/fetch', { shop_id: S.shopId, day: S.day });
-    $('saveHint').textContent = '已取数';
-    toast('已取数');
+    $('saveHint').textContent = '已提交';
+    toast('已提交');
     setView('recon');
   } catch (e) {
-    $('saveHint').textContent = '拉取失败，读数已保存';
+    $('saveHint').textContent = '取数失败，读数已保存';
     toast(String(e.message || e), 'bad');
   } finally {
-    btn.dataset.loading = 'false';
     btn.disabled = false;
+    updateProgress();
   }
 }
 
@@ -815,18 +977,11 @@ function renderRecon() {
   $('fDiff').dataset.tone = Math.abs(s.diff_ok) >= 1000 ? 'bad' : '';
   $('fMeta').textContent = `${s.ok} 台可核对 · 含异常合计 ${fmt1(s.diff_all)} · 误差超千 ${s.big} 台`;
 
-  // 锁定状态：总部可锁/解锁，锁定后所有人看到的是定死的数
+  // 锁定状态只作为提示显示，锁定/解锁按钮已下线
   const fz = d.frozen;
-  const fb = $('btnFreeze');
-  fb.hidden = S.role !== 'hq';
   if (fz) {
     $('reconLede').textContent = d.day + ' · 已锁定'
       + (fz.at ? '（' + fz.at.slice(0, 16) + ' ' + (fz.by || '') + '）' : '');
-    fb.textContent = '解锁重算';
-    fb.dataset.act = 'unfreeze';
-  } else {
-    fb.textContent = '锁定这一天';
-    fb.dataset.act = 'freeze';
   }
 
   const pach = S.kind === 'pachinko';
@@ -861,30 +1016,24 @@ function renderRecon() {
         } else {
           tdName.textContent = r.name;
         }
+        // 照片：有就点开看，没有就提示（核对页也能翻这一天的照片）
+        const n = r.photos || 0;
+        const ex = !!r.photos_expired;
+        const chip = el('button', 'pic-chip', n ? (ex ? '照片已过期' : ('照片 ' + n)) : '无照片');
+        chip.type = 'button';
+        chip.dataset.has = n && !ex ? 'true' : 'false';
+        if (n && !ex) {
+          chip.addEventListener('click', () => openDayPhotos(r));
+        } else {
+          chip.disabled = true;
+        }
+        tdName.appendChild(chip);
         tr.appendChild(tdName);
         return;
       }
       if (c.key === 'status') {
         const st = el('td');
         st.appendChild(statusTag(r.status));
-        if (S.role === 'hq' && (r.reset || r.status === '读数比昨天小')) {
-          const rb = el('button', 'reset-btn', r.reset ? '已按归零' : '按归零算');
-          rb.type = 'button';
-          rb.dataset.on = r.reset ? 'true' : 'false';
-          rb.addEventListener('click', async () => {
-            rb.disabled = true;
-            try {
-              await api('/api/recon/reset',
-                { shop_id: S.shopId, day: S.day, unit_id: r.unit_id, on: !r.reset });
-              toast(r.reset ? '已取消归零' : '已按归零计算');
-              await loadRecon();
-            } catch (e) {
-              toast(String(e.message || e), 'bad');
-              rb.disabled = false;
-            }
-          });
-          st.appendChild(rb);
-        }
         tr.appendChild(st);
         return;
       }
@@ -893,7 +1042,14 @@ function renderRecon() {
         return;
       }
       const v = c.text(r);
-      const td = el('td', c.cls, v === null ? '-' : nf.format(v));
+      const td = el('td', c.cls);
+      if (v === null || v === undefined) {
+        td.textContent = '-';
+      } else if (c.cls && c.cls.split(' ').indexOf('num') >= 0) {
+        td.textContent = nf.format(v);
+      } else {
+        td.textContent = String(v);
+      }
       if (c.bad && c.bad(r)) td.dataset.tone = 'bad';
       tr.appendChild(td);
     });
@@ -2500,30 +2656,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav__item').forEach((b) => {
     b.addEventListener('click', () => setView(b.dataset.view));
   });
-  $('btnSave').addEventListener('click', saveAndFetch);
+  $('btnSave').addEventListener('click', () => saveDraft($('btnSave')));
+  $('btnSubmit').addEventListener('click', () => submitDay($('btnSubmit')));
   $('btnToRecon').addEventListener('click', () => setView('recon'));
-  $('btnFreeze').addEventListener('click', async () => {
-    const unfreeze = $('btnFreeze').dataset.act === 'unfreeze';
-    if (!unfreeze) {
-      const ok = await UI.confirm({
-        title: '锁定 ' + S.day,
-        body: '锁定后这一天的数字就定死了，之后宝点补数、改读数都不再影响它。只有总部能解锁。',
-        okText: '锁定',
-      });
-      if (!ok) return;
-    }
-    $('btnFreeze').disabled = true;
-    try {
-      await api('/api/recon/freeze',
-        { shop_id: S.shopId, day: S.day, unfreeze });
-      toast(unfreeze ? '已解锁' : '已锁定');
-      await loadRecon();
-    } catch (e) {
-      toast(String(e.message || e), 'bad');
-    } finally {
-      $('btnFreeze').disabled = false;
-    }
-  });
 
   $('btnExport').addEventListener('click', exportDialog);
   $('conn').addEventListener('click', bdLoginClick);
