@@ -110,6 +110,8 @@ def ensure_codes():
             c.execute("ALTER TABLE shops ADD COLUMN jj_base TEXT")
         if "jj_shop_id" not in scols:
             c.execute("ALTER TABLE shops ADD COLUMN jj_shop_id TEXT")
+        if "jj_chain_id" not in scols:
+            c.execute("ALTER TABLE shops ADD COLUMN jj_chain_id TEXT")
         if "code" not in scols:
             c.execute("ALTER TABLE shops ADD COLUMN code TEXT")
         ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
@@ -858,7 +860,8 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
     import jingjian
     d = shop_row(shop_id) or {}
     base = d.get("jj_base") or jingjian.DEFAULT_BASE
-    rows = jingjian.day_summary(base, (d.get("jj_shop_id") or "").strip(), day)
+    rows = jingjian.day_summary(base, (d.get("jj_shop_id") or "").strip(), day,
+                                (d.get("jj_chain_id") or "").strip())
     ts = now()
     with conn() as c:
         c.execute("DELETE FROM machine_daily WHERE shop_id=? AND day=?", (shop_id, day))
@@ -1091,18 +1094,16 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         comms_sorted = sorted(comms, key=lambda x: (cno.get(x, "~"), x))
         got = [cards[c] for c in comms if c in cards]
         up = sum((g["up_native"] or 0) + (g["up_give"] or 0) for g in got) if got else None
-        # 鲸舰店：机台维度，按机台名对上
+        # 机台维度（鲸舰 / 世软）：一台机多个卡头时要把各卡头的收币加起来
         if not got and mcards:
-            # 先按机台名，再按卡头（世软的机台名是「碧海传说 A」，库里存的是机位号）
-            hit = mcards.get(u["name"])
-            if not hit:
-                for cid in comms:
-                    if cid in mcards:
-                        hit = mcards[cid]
-                        break
-            if hit:
-                # 鲸舰只有投币额，没有下币
-                up = hit["coins"] or 0
+            hits = [mcards[c] for c in comms if c in mcards]
+            if not hits:
+                hit = mcards.get(u["name"])
+                if hit:
+                    hits = [hit]
+            if hits:
+                # 这类系统只有投币额，没有下币
+                up = sum((h["coins"] or 0) for h in hits)
                 got = [{"up_native": up, "up_give": 0, "down_qty": 0}]
         down = sum((g["down_qty"] or 0) for g in got) / RATE if got else None
         rd = reads.get(u["id"])
