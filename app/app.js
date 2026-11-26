@@ -1173,6 +1173,9 @@ function renderRecon() {
   }
 
   const pach = S.kind === 'pachinko';
+  // 空壳机台（没卡头也没读数）不进核对表——历史拆分留下的残骸
+  d.rows = d.rows.filter((r) => (r.comms || []).length || r.in_r !== null || r.out_r !== null
+    || r.meter !== null);
   // 同一台机的几行排在一起（弹珠机按品牌），组内按 P 位
   d.rows = groupByName(d.rows.slice(), pach);
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
