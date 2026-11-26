@@ -2103,14 +2103,11 @@ def sync_pos(shop_id: str, days: int = 30) -> dict:
 
 
 # 宝点「项目分组」→ 本地两类码表（2026-11-26 用户定）
-BD_PACHINKO_TEAMS = ("出珠弹珠机", "蓝票弹珠机")
-BD_PUSHER_TEAMS = ("中岛推币类", "其他推币机", "屏幕机", "屏幕类",
-                   "连排推币机", "连排推币类", "推币机")
-# 宝点的项目分组名改过几次（屏幕机→屏幕类、连排推币机→连排推币类），
-# 只认白名单会漏机台，所以再按关键词兜一层（2026-11-26 杭州店整批推币机被漏掉）
-# 关键词兜底：只认「弹珠」「推币」。
-# 「屏幕」不能做关键词——儿童屏幕类属于彩票机类，会误判成推币机（2026-11-26 杭州店）
-TEAM_KIND_KW = (("弹珠", "pachinko"), ("推币", "pusher"))
+BD_PACHINKO_TEAMS = ("弹珠机", "出珠弹珠机", "蓝票弹珠机")
+# 只认「推币机类」这个大类的子分组，别的一概不进码表（2026-11-26 用户口径）
+BD_PUSHER_TEAMS = ("推币机", "其他推币机", "屏幕类", "连排推币类", "中岛推币类")
+# 不做关键词兜底：名字像不等于就是，误判会把彩票机、儿童屏幕机拉进码表
+TEAM_KIND_KW = ()
 
 
 def _bd_team(raw) -> str:
@@ -2145,11 +2142,9 @@ def bd_device_list(shop_id: str) -> list:
             elif team in BD_PUSHER_TEAMS:
                 kind = "pusher"
             else:
-                kind = next((k for kw, k in TEAM_KIND_KW if kw in team), None)
-                if not kind:
-                    unknown.setdefault(team or "(没分组)", []).append(
-                        (x.get("deviceName") or "").strip())
-                    continue
+                unknown.setdefault(team or "(没分组)", []).append(
+                    (x.get("deviceName") or "").strip())
+                continue
             comms = [c.strip() for c in str(x.get("commIds") or "").split(",") if c.strip()]
             # 脏数据：宝点里有 commIds 是 "0" 的（彩虹王国），不是真卡头，跳过
             comms = [c for c in comms if c.isdigit() and c != "0"]
