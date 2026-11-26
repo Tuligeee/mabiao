@@ -1199,10 +1199,35 @@ function renderRecon() {
 
   // 一台机一组：组头写机台名（弹珠机写品牌），组里一行一个卡头；合并的只有一行
   const keyOf = (r) => (pach ? (r.brand || '未分品牌') : (baseName(r.name) || r.name));
+  // 同一个卡头在组里只留一行：优先保留有照片 / 有读数 / 有宝点数的那行（拆分合并留下的空壳会被挤掉）
+  const weight = (r) => ((r.photos || 0) ? 4 : 0)
+    + ((r.in_r !== null && r.in_r !== undefined) || (r.out_r !== null && r.out_r !== undefined) ? 2 : 0)
+    + (r.meter !== null && r.meter !== undefined ? 1 : 0);
+  {
+    const groups = new Map();
+    d.rows.forEach((r) => {
+      const k = keyOf(r);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    });
+    const out = [];
+    groups.forEach((list) => {
+      list.sort((a, b) => weight(b) - weight(a)
+        || String(((a.poss || [])[0] || '')).localeCompare(String(((b.poss || [])[0] || ''))));
+      const seen = new Set();
+      list.forEach((r) => {
+        const cs = (r.comms || []).map(String);
+        if (cs.length && cs.every((c) => seen.has(c))) return;   // 这个卡头已经有更完整的一行
+        cs.forEach((c) => seen.add(c));
+        out.push(r);
+      });
+    });
+    d.rows = out;
+  }
   const counts = {};
   d.rows.forEach((r) => {
     const k = keyOf(r);
-    counts[k] = (counts[k] || 0) + (pach ? 1 : (r.comm_count || 1));
+    counts[k] = (counts[k] || 0) + (pach ? 1 : ((r.comms || []).length || 1));
   });
   let lastGroup = null;
 
@@ -2559,7 +2584,7 @@ function renderMachineView(card, g) {
   del.addEventListener('click', async () => {
     const ok = await UI.confirm({
       title: '停用机台',
-      body: '「' + g.key + '」不再出现在新的核对里；已经核对过的日期仍然保留。',
+      body: '「' + g.key + '」今天起不再出现在核对页；今天已经填过数的会留最后一天，历史日期都保留。',
       okText: '停用',
     });
     if (!ok) return;
