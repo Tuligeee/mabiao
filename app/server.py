@@ -1278,25 +1278,33 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             ph[r["unit_id"]] = {"n": r["n"], "expired": bool(r["ex"])}
         mach = {r["id"]: dict(r) for r in c.execute("SELECT * FROM machines")}
 
-    # 共用一块码表的机台：只留 P1 那一行，卡头算整台机的
+    # 共用一块码表的机台：只留一行，卡头算整台机的（按机台去重，不看 pos）
+    seen_shared = set()
     shown = []
     for u in units:
-        m = mach.get(u.get("machine_id")) or {}
-        if m.get("shared") and (u.get("pos") or 1) != 1:
-            continue
-        u = dict(u)
-        if m.get("shared"):
-            u["comms"] = [{"comm_id": x} for x in machine_comms(m["id"], day)]
+        mu = mach.get(u.get("machine_id")) or {}
+        if mu.get("shared"):
+            if mu["id"] in seen_shared:
+                continue
+            seen_shared.add(mu["id"])
+            u = dict(u)
+            u["name"] = mu["name"]
+            u["comms"] = [{"comm_id": x} for x in machine_comms(mu["id"], day)]
         shown.append(u)
     units = shown
     today = date.today().isoformat()
     rows = []
+    seen_shared = set()
     for u in units:
         # 已停用的机台：当天没填过数就不再占核对页一格（停用当天填过的留最后一天）
         if not u["active"] and not reads.get(u["id"]) and day >= today:
             continue
-        # 用「当天归属」的卡头，卡头换过机台也不改写历史
+        # 共用一块码表的机台只出一行
         mu = mach.get(u.get("machine_id")) or {}
+        if mu.get("shared"):
+            if mu["id"] in seen_shared:
+                continue
+            seen_shared.add(mu["id"])
         hist = machine_comms(mu["id"], day) if mu.get("shared") else comms_on(u["id"], day)
         comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
         # 卡头ID 按 P 位排（P1 在前），和墙上/Excel 的顺序对得上
