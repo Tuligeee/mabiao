@@ -2484,12 +2484,11 @@ function renderMachineEdit(card, g) {
   rowN.appendChild(nameIn);
   card.appendChild(rowN);
 
-  // 品牌（只对弹珠机）
+  // 品牌（只对弹珠机）：跟在名称右边，就一个正常大小的下拉，不占一整行
   let brandVal = g.brand || '';
   if ((g.kind || 'pusher') === 'pachinko') {
-    const row = el('div', 'mf__row');
-    row.appendChild(el('span', 'mf__k', '品牌'));
-    const wrap = el('div', 'pick pick--block');
+    rowN.appendChild(el('span', 'mf__k mf__k--inline', '品牌'));
+    const wrap = el('div', 'pick mf__brand');
     const btn = el('button', 'pick__btn');
     btn.type = 'button';
     btn.setAttribute('aria-haspopup', 'listbox');
@@ -2503,8 +2502,7 @@ function renderMachineEdit(card, g) {
     pop.setAttribute('role', 'listbox');
     wrap.appendChild(btn);
     wrap.appendChild(pop);
-    row.appendChild(wrap);
-    card.appendChild(row);
+    rowN.appendChild(wrap);
 
     const picker = UI.picker({
       btn, pop, valueEl: valEl,

@@ -1034,8 +1034,11 @@ body[data-scanning="1"] { overflow: hidden; }
   font-size: var(--text-xs); color: var(--ink-3);
   padding-block-start: 7px;
 }
-.mf__row .pick--block { flex: 1; }
-.mf__row .pick--block .pick__btn { inline-size: 100%; justify-content: space-between; }
+/* 跟在名称右边的行内标签（品牌）：不占固定宽度，也不带顶部留白 */
+.mf__k--inline { inline-size: auto; padding-block-start: 0; margin-inline-start: var(--space-2); }
+/* 品牌下拉：正常控件大小，不铺满一行 */
+.mf__brand { flex: none; inline-size: 11rem; }
+.mf__brand .pick__btn { inline-size: 100%; justify-content: space-between; }
 
 .mf__chips {
   display: flex; flex-wrap: wrap; gap: var(--space-2);
@@ -1626,7 +1629,6 @@ body[data-scanning="1"] { overflow: hidden; }
 .machine[data-editing="true"] .machine__comms { grid-area: auto; }
 /* 编辑时品牌下拉不被列表容器的 overflow:hidden 裁掉 */
 .machines:has(.machine[data-editing="true"]) { overflow: visible; }
-.mf__row .pick--block { min-inline-size: 0; }
 
 /* 卡头占满一行、跟着名称走；按钮居中收尾 */
 .machine[data-editing="true"] .mf__row--top { align-items: center; }
