@@ -2664,35 +2664,6 @@ async function mergeMachine(g) {
   }
 }
 
-async function importShops() {
-  const btn = $('btnImportShops');
-  btn.disabled = true;
-  $('importStatus').textContent = '导入门店';
-  try {
-    const r = await api('/api/shops/sync', {});
-    $('importStatus').textContent = `已导入 ${r.shops} 家，正在拉机台（${r.task} 家）`;
-    pollJob(async () => {
-      $('importStatus').textContent = '导入完成，可以逐店检查机台';
-      btn.disabled = false;
-
-  let b;
-  try {
-    b = await api('/api/bootstrap');
-  } catch (e) {
-    showBootErr('bootstrap 失败：' + (e.message || e));
-    throw e;
-  }
-      S.shops = b.shops;
-      S.units = b.units;
-      loadSettings();
-    });
-  } catch (e) {
-    btn.disabled = false;
-    $('importStatus').textContent = '';
-    toast(String(e.message || e), 'bad');
-  }
-}
-
 /* ------------------------------------------------------------ 启动 */
 let shopPicker = null;
 let dayPicker = null;
@@ -3015,7 +2986,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btnConfirm').addEventListener('click', confirmUnits);
   if ($('btnBdSync')) $('btnBdSync').addEventListener('click', () => openBdSync($('btnBdSync')));
-  $('btnImportShops').addEventListener('click', importShops);
   $('btnBackShops').addEventListener('click', loadSettings);
   $('btnScanBack').addEventListener('click', () => {
     if (HIST.ready && history.length > 1) history.back();
