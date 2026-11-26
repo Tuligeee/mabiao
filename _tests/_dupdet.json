@@ -1,0 +1,58 @@
+[
+ {
+  "machineName": "夺宝连萌",
+  "machineNo": "27",
+  "consoleNo": "1P",
+  "consoleNoIndex": 1,
+  "consoleId": "693f555f-d070-46df-8418-3d34f9a5a4f7",
+  "inTotalAmount": 5
+ },
+ {
+  "machineName": "夺宝连萌",
+  "machineNo": "27",
+  "consoleNo": "2P",
+  "consoleNoIndex": 2,
+  "consoleId": "85f92180-c0fa-44a0-b9ce-dd23c0419909",
+  "inTotalAmount": 5
+ },
+ {
+  "machineName": "夺宝连萌",
+  "machineNo": "27",
+  "consoleNo": "2P",
+  "consoleNoIndex": 2,
+  "consoleId": "d8341551-c84d-4f2f-86da-f3853bbe5c98",
+  "inTotalAmount": 0
+ },
+ {
+  "machineName": "夺宝连萌",
+  "machineNo": "27",
+  "consoleNo": "2P",
+  "consoleNoIndex": 2,
+  "consoleId": "fa47e2f3-b981-4f35-b0f5-bb6d045d69c6",
+  "inTotalAmount": 0
+ },
+ {
+  "machineName": "弹球有礼",
+  "machineNo": "28",
+  "consoleNo": "1P",
+  "consoleNoIndex": 1,
+  "consoleId": "f4be2dd5-d436-4a21-861d-768dae59076d",
+  "inTotalAmount": 150
+ },
+ {
+  "machineName": "弹球有礼",
+  "machineNo": "28",
+  "consoleNo": "2P",
+  "consoleNoIndex": 2,
+  "consoleId": "5bf02b19-4a34-454f-880a-7fc3e869f9d2",
+  "inTotalAmount": 40
+ },
+ {
+  "machineName": "弹球有礼",
+  "machineNo": "28",
+  "consoleNo": "2P",
+  "consoleNoIndex": 2,
+  "consoleId": "fe04982c-4ccb-45b9-9091-126eeb989f60",
+  "inTotalAmount": 120
+ }
+]

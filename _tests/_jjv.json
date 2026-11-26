@@ -1,0 +1,75 @@
+{
+ "23738": {
+  "机型分布": {
+   "礼品机": 31,
+   "卡片机": 4,
+   "模拟机": 11,
+   "弹珠机": 20,
+   "配套机台": 1
+  },
+  "样例": [
+   {
+    "kindName": "弹珠机",
+    "machineName": "弹弹侠弹珠机-001",
+    "machineNo": "32",
+    "inTotalAmount": 250,
+    "outNativeCoin1TotalAmount": 0,
+    "outPhysicalCoin1TotalAmount": 0,
+    "outVirtuallyCoin1TotalAmount": 0,
+    "outMarblesTotalAmount": 0,
+    "inMarblesTotalAmount": 0,
+    "outPhysicalCardTotalAmount": 0,
+    "outLotteryTotalAmount": 0,
+    "winningCoins": 250
+   },
+   {
+    "kindName": "弹珠机",
+    "machineName": "弹弹侠弹珠机-002",
+    "machineNo": "33",
+    "inTotalAmount": 250,
+    "outNativeCoin1TotalAmount": 0,
+    "outPhysicalCoin1TotalAmount": 0,
+    "outVirtuallyCoin1TotalAmount": 0,
+    "outMarblesTotalAmount": 0,
+    "inMarblesTotalAmount": 0,
+    "outPhysicalCardTotalAmount": 0,
+    "outLotteryTotalAmount": 0,
+    "winningCoins": 250
+   },
+   {
+    "kindName": "弹珠机",
+    "machineName": "弹弹侠弹珠机-003",
+    "machineNo": "34",
+    "inTotalAmount": 300,
+    "outNativeCoin1TotalAmount": 0,
+    "outPhysicalCoin1TotalAmount": 0,
+    "outVirtuallyCoin1TotalAmount": 0,
+    "outMarblesTotalAmount": 0,
+    "inMarblesTotalAmount": 0,
+    "outPhysicalCardTotalAmount": 0,
+    "outLotteryTotalAmount": 0,
+    "winningCoins": 300
+   },
+   {
+    "kindName": "弹珠机",
+    "machineName": "弹弹侠弹珠机-005",
+    "machineNo": "36",
+    "inTotalAmount": 100,
+    "outNativeCoin1TotalAmount": 0,
+    "outPhysicalCoin1TotalAmount": 0,
+    "outVirtuallyCoin1TotalAmount": 0,
+    "outMarblesTotalAmount": 0,
+    "inMarblesTotalAmount": 0,
+    "outPhysicalCardTotalAmount": 0,
+    "outLotteryTotalAmount": 0,
+    "winningCoins": 100
+   }
+  ]
+ },
+ "23549": {
+  "机型分布": {
+   "礼品机": 79
+  },
+  "样例": []
+ }
+}

@@ -390,6 +390,12 @@ def t_jingjian_fetch():
         {"machine": "未弹珠机-001", "coins": 4400, "count": 45},
         {"machine": "娃娃机-001", "coins": 300, "count": 3},
     ]
+    fake.day_consoles = lambda base, shop, day, chain="": [
+        {"machine": "未弹珠机-001", "pos": 1, "console_id": "c1", "coins": 4400,
+         "count": 45, "out_coins": 0, "winning": 0},
+        {"machine": "娃娃机-001", "pos": 1, "console_id": "c2", "coins": 300,
+         "count": 3, "out_coins": 0, "winning": 0},
+    ]
     sys.modules["jingjian"] = fake
     try:
         sid = mk_shop("测试店-鲸舰", provider="jingjian", jj_base="http://fake", jj_shop="23738")
