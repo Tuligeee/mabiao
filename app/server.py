@@ -2225,15 +2225,21 @@ def bd_sync_apply(shop_id: str, items: list) -> dict:
             marks = ",".join("?" * len(comms))
             owners = {r["unit_id"] for r in c.execute(
                 "SELECT unit_id FROM comms WHERE comm_id IN (%s)" % marks, comms)}
-        res = save_unit({"shop_id": shop_id, "id": uid, "name": name, "kind": kind,
-                         "comms": comms, "shared": len(comms) > 1})
-        target = res["id"]
-        if uid:
-            updated += 1
-        else:
-            created += 1
+        # 默认一台卡头一块码表：宝点一个机台带 4 个卡头，同步下来是 4 行，不自动并成「共用码表」
+        targets = set()
+        for i, cid in enumerate(comms):
+            sub = name if len(comms) == 1 else "%s P%d" % (name, i + 1)
+            with conn() as c:
+                sub = unique_unit_name(c, shop_id, sub, skip_id=(uid if i == 0 else None))
+            res = save_unit({"shop_id": shop_id, "id": (uid if i == 0 else None),
+                             "name": sub, "kind": kind, "comms": [cid], "shared": False})
+            targets.add(res["id"])
+            if i == 0 and uid:
+                updated += 1
+            else:
+                created += 1
         with conn() as c:
-            for other in owners - {target}:
+            for other in owners - targets:
                 left = c.execute("SELECT COUNT(*) FROM comms WHERE unit_id=?",
                                  (other,)).fetchone()[0]
                 if not left:
