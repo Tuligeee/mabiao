@@ -903,6 +903,22 @@ body[data-scanning="1"] { overflow: hidden; }
 /* 核对页导出按钮：跟在说明文字下面 */
 .recon-export { margin-block-start: var(--space-3); }
 
+/* 核对页：一台机一组，组头横跨整行 */
+.recon-group td {
+  background: var(--surface-2, #f6f7f9);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--line);
+}
+.recon-group td::before { content: none; }
+.recon-group__name { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--ink); }
+.recon-group__n {
+  margin-inline-start: var(--space-2);
+  font-size: var(--text-xs); font-weight: var(--weight-regular, 400); color: var(--ink-3);
+}
+.tbl__pos { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+
+
 /* 原因弹窗：补充说明的标签和输入框 */
 .reason-label {
   display: block;

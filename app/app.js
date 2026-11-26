@@ -570,7 +570,7 @@ function groupByName(rows, isPach) {
     const b = key(r);
     if (!order.has(b)) order.set(b, order.size);
   });
-  const firstP = (r) => (((r.pcomms || [])[0] || {}).p || '');
+  const firstP = (r) => ((((r.pcomms || [])[0] || {}).p) || (r.poss || [])[0] || '');
   rows.sort((a, b) => (order.get(key(a)) - order.get(key(b)))
     || String(firstP(a)).localeCompare(String(firstP(b)))
     || String(a.name).localeCompare(String(b.name)));
@@ -1173,6 +1173,8 @@ function renderRecon() {
   }
 
   const pach = S.kind === 'pachinko';
+  // 同一台机的几行排在一起（弹珠机按品牌），组内按 P 位
+  d.rows = groupByName(d.rows.slice(), pach);
   document.querySelectorAll('#reconKind .seg__b').forEach((b) => {
     b.setAttribute('aria-selected', b.dataset.kind === S.kind ? 'true' : 'false');
   });
@@ -1192,17 +1194,44 @@ function renderRecon() {
   body.innerHTML = '';
   $('reconEmpty').hidden = d.rows.length > 0;
 
+  // 一台机一组：组头写机台名（弹珠机写品牌），组里一行一个卡头；合并的只有一行
+  const keyOf = (r) => (pach ? (r.brand || '未分品牌') : (baseName(r.name) || r.name));
+  const counts = {};
   d.rows.forEach((r) => {
+    const k = keyOf(r);
+    counts[k] = (counts[k] || 0) + (pach ? 1 : (r.comm_count || 1));
+  });
+  let lastGroup = null;
+
+  d.rows.forEach((r) => {
+    const g = keyOf(r);
+    if (g !== lastGroup) {
+      const gtr = el('tr', 'recon-group');
+      const gtd = el('td');
+      gtd.colSpan = Math.max(1, cols.length);
+      gtd.appendChild(el('span', 'recon-group__name', g));
+      gtd.appendChild(el('span', 'recon-group__n',
+        pach ? (counts[g] + ' 台') : (counts[g] + ' 个卡头')));
+      gtr.appendChild(gtd);
+      body.appendChild(gtr);
+      lastGroup = g;
+    }
+
     const tr = el('tr');
     cols.forEach((c) => {
       if (c.key === 'name') {
         const tdName = el('td', 'name');
+        // 组头已经有名字了，卡上写「P位：通讯ID」（合并的写 P1–P4）
+        const ps = (r.poss || []).filter(Boolean);
+        const one = ps.length === 1;
         const nm2 = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
-        if (nm2) {
-          tdName.appendChild(document.createTextNode(nm2[1]));
-          tdName.appendChild(el('span', 'tbl__comm', nm2[2]));
-        } else {
-          tdName.textContent = r.name;
+        const comms = (r.comms || []);
+        tdName.appendChild(el('span', 'tbl__pos',
+          one ? ps[0] : (posLabel(r) || '')));
+        const cid = one ? (comms[0] || (nm2 ? nm2[2] : '')) : '';
+        if (cid) tdName.appendChild(el('span', 'tbl__comm', '：' + cid));
+        if (!ps.length && !cid) {
+          tdName.textContent = baseName(r.name) || r.name;
         }
         // 照片：有就点开看，没有就提示（核对页也能翻这一天的照片）
         const n = r.photos || 0;
@@ -1251,6 +1280,20 @@ function renderRecon() {
   });
 }
 
+// P 位：连着的一组写成 P1–P4，其它情况用斜杠拼
+function posLabel(r) {
+  const arr = (r.poss || []).filter(Boolean);
+  if (!arr.length) return null;
+  const m = arr.map((x) => /^P(\d+)$/.exec(String(x).trim()));
+  if (m.every(Boolean)) {
+    const ns = m.map((x) => Number(x[1])).sort((a, b) => a - b);
+    const seq = ns.every((n, i) => i === 0 || n === ns[i - 1] + 1);
+    if (seq && ns.length > 1) return 'P' + ns[0] + '–P' + ns[ns.length - 1];
+    if (seq) return 'P' + ns[0];
+  }
+  return arr.join(' / ');
+}
+
 // 核对表的列定义：页面和导出共用这一份，避免两边各写一套导致文件对不上页面
 // mode='page' 页面（推币机只留 卡头收币/码表收币/误差/状态/原因）
 // mode='file' 导出（多带 卡头ID 和 上/下币，明细能复盘）
@@ -1263,19 +1306,6 @@ function reconColumns(rows, pach, mode = 'page') {
   // 比率列自己带 %，不再走 nf.format（那会把 "8.3%" 当数字）
   const pct = (v) => (v === null || v === undefined ? null : (v * 100).toFixed(1) + '%');
   const pm = (r) => r.p || {};
-  // P 位：连着的一组写成 P1–P4，其它情况用斜杠拼
-  const poss = (r) => {
-    const arr = (r.poss || []).filter(Boolean);
-    if (!arr.length) return null;
-    const m = arr.map((x) => /^P(\d+)$/.exec(String(x).trim()));
-    if (m.every(Boolean)) {
-      const ns = m.map((x) => Number(x[1])).sort((a, b) => a - b);
-      const seq = ns.every((n, i) => i === 0 || n === ns[i - 1] + 1);
-      if (seq && ns.length > 1) return 'P' + ns[0] + '–P' + ns[ns.length - 1];
-      if (seq) return 'P' + ns[0];
-    }
-    return arr.join(' / ');
-  };
   const cols = [
     {
       key: 'name', label: '机台',
@@ -1290,10 +1320,9 @@ function reconColumns(rows, pach, mode = 'page') {
       key: 'comms', label: '卡头ID', cls: 'comm',
       text: (r) => ((r.comms && r.comms.length) ? r.comms.join(' / ') : null),
     });
-    cols.push({ key: 'poss', label: '卡头P位', cls: 'comm', text: poss });
-  } else if (!pach) {
-    cols.push({ key: 'poss', label: '卡头P位', cls: 'comm', text: poss });
+    cols.push({ key: 'poss', label: '卡头P位', cls: 'comm', text: posLabel });
   }
+  // 页面上的 P 位写在机台格子里（P2：733670），不再单占一列
   if (pach) {
     if (hasF('in_r')) {
       cols.push({ key: 'meter_in', label: '码表投币', cls: 'num', text: (r) => num(r.meter_in) });
