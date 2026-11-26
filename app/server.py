@@ -873,12 +873,34 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
     return {"ok": True, "provider": "jingjian", "machines": len(rows)}
 
 
+def fetch_shiruan_day(shop_id: str, day: str) -> dict:
+    """世软店：拉机台收币，落 machine_daily（世软也是机台维度）。"""
+    import shiruan
+    d = shop_row(shop_id) or {}
+    store_id = (d.get("jj_shop_id") or "").strip()
+    if not store_id:
+        raise RuntimeError("这家店没配世软门店编号（jj_shop_id）")
+    rows = shiruan.day_summary(day, store_id)
+    ts = now()
+    with conn() as c:
+        c.execute("DELETE FROM machine_daily WHERE shop_id=? AND day=?", (shop_id, day))
+        for r in rows:
+            c.execute("INSERT OR REPLACE INTO machine_daily"
+                      "(shop_id,day,machine_name,coins,play_count,raw,fetched_at) "
+                      "VALUES(?,?,?,?,?,?,?)",
+                      (shop_id, day, r["machine"], r["coins"], r["count"],
+                       json.dumps(r, ensure_ascii=False), ts))
+    return {"ok": True, "provider": "shiruan", "machines": len(rows)}
+
+
 def fetch_day(shop_id: str, day: str) -> dict:
     """拉一天的上币 + 下币，落 card_daily（鲸舰店走机台汇总）。"""
     d = shop_row(shop_id) or {}
     prov = d.get("provider") or "baodian"
     if prov == "jingjian":
         return fetch_jingjian_day(shop_id, day)
+    if prov == "shiruan":
+        return fetch_shiruan_day(shop_id, day)
     if prov == "manual":
         return {"ok": True, "provider": "manual", "skipped": "只抄表，没有卡头数据"}
     # 宝点店：登录态过期就先拿账密自动登一次（成功后所有店一起恢复）
@@ -3085,7 +3107,7 @@ def api_entry(q):
     return out
 
 
-PROVIDERS = [("baodian", "宝点"), ("jingjian", "鲸舰"), ("manual", "纯手工")]
+PROVIDERS = [("baodian", "宝点"), ("jingjian", "鲸舰"), ("shiruan", "世软"), ("manual", "纯手工")]
 
 
 def api_shop_provider(b) -> dict:

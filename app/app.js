@@ -1583,7 +1583,7 @@ async function loadSettings() {
     const tdP = el('td');
     tdP.dataset.label = '取数方式';
     const sel = el('select', 'input add-panel__sel');
-    [['baodian', '宝点'], ['jingjian', '鲸舰'], ['manual', '纯手工']].forEach(([v, t]) => {
+    [['baodian', '宝点'], ['jingjian', '鲸舰'], ['shiruan', '世软'], ['manual', '纯手工']].forEach(([v, t]) => {
       const o = el('option', null, t);
       o.value = v;
       if ((r.provider || 'baodian') === v) o.selected = true;
