@@ -2913,7 +2913,9 @@ async function boot() {
     pop: $('dayPop'),
     valueEl: $('dayVal'),
     value: S.day,
-    max: S.maxDay || S.editDay,
+    // 门店只能填/看昨天和今天，更早更晚的日期都是灰的；总部可以往前翻历史
+    min: () => (S.role === 'store' ? S.editDay : ''),
+    max: () => (S.role === 'store' ? S.today : (S.maxDay || S.editDay)),
     onChange: async (v) => {
       S.day = v;
       if (S.view === 'entry') await loadEntry();

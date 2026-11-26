@@ -93,7 +93,7 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------- 日期 */
-  function datePicker({ btn, pop, valueEl, value, onChange, max }) {
+  function datePicker({ btn, pop, valueEl, value, onChange, max, min }) {
     let cur = value ? new Date(value + 'T00:00:00') : new Date();
     cur.setDate(1);
     let sel = value || '';
@@ -117,6 +117,9 @@ const UI = (() => {
     }
 
     function render() {
+      // min/max 传函数就在每次渲染时求值（角色、门店切换后要跟着变）
+      const lo = typeof min === 'function' ? min() : min;
+      const hi = typeof max === 'function' ? max() : max;
       pop.innerHTML = '';
       const head = el('div', 'dp__head');
       const prev = el('button', 'dp__nav');
@@ -152,7 +155,7 @@ const UI = (() => {
         b.dataset.iso = v;
         if (v === sel) b.setAttribute('aria-selected', 'true');
         if (v === todayIso) b.dataset.today = 'true';
-        if (max && v > max) {
+        if ((hi && v > hi) || (lo && v < lo)) {
           b.disabled = true;
           b.dataset.off = 'true';
           b.setAttribute('aria-disabled', 'true');
@@ -171,8 +174,8 @@ const UI = (() => {
       pop.appendChild(grid);
 
       const foot = el('div', 'dp__foot');
-      const jumpIso = max || todayIso;
-      const t = el('button', 'dp__today', max ? '回到最近一天' : '回到今天');
+      const jumpIso = hi || todayIso;
+      const t = el('button', 'dp__today', hi ? '回到最近一天' : '回到今天');
       t.type = 'button';
       t.addEventListener('click', () => {
         sel = jumpIso;
