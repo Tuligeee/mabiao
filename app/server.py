@@ -657,6 +657,17 @@ def now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def unique_unit_name(c, shop_id: str, base: str, skip_id=None) -> str:
+    """重名时才加 (2)(3)，绝不往机台名后面拼通讯ID（2026-11-26 要求）。"""
+    base = (base or "").strip() or "未命名"
+    for i in range(1, 60):
+        cand = base if i == 1 else "%s (%d)" % (base, i)
+        row = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
+                        (shop_id, cand)).fetchone()
+        if not row or (skip_id is not None and row["id"] == skip_id):
+            return cand
+    return base
+
 def sync_units(shop_id: str, devices: list) -> int:
     """按宝点设备清单推导码表单元。
 
@@ -691,7 +702,7 @@ def sync_units(shop_id: str, devices: list) -> int:
                 made += 1
             else:
                 for d in ds:
-                    label = "%s %s" % (name, d.get("commId"))
+                    label = unique_unit_name(c, shop_id, name)
                     c.execute("INSERT INTO units(shop_id,name,team,shared,kind) VALUES(?,?,?,0,?) "
                               "ON CONFLICT(shop_id,name) DO UPDATE SET team=excluded.team, "
                               "shared=0, active=1, kind=excluded.kind", (shop_id, label, team, kind))
@@ -1117,7 +1128,7 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             "unit_id": u["id"], "name": u["name"], "team": u["team"],
             "shared": bool(u["shared"]), "comm_count": len(comms),
             "comms": comms_sorted,
-            "poss": [cno.get(x) or "" for x in comms_sorted],
+            "poss": _poss_one(cno, comms_sorted),
             "up": up, "down": down, "head": head, "meter_in": tin, "meter_out": tout,
             "meter": meter, "diff": diff, "rate": rate, "status": status,
             "in_r": rd["in_r"] if rd else None, "out_r": rd["out_r"] if rd else None,
@@ -1538,7 +1549,7 @@ class Handler(BaseHTTPRequestHandler):
                 m = next((x for x in _machine_groups(u["shop_id"]) if x["code"] == code), None)
                 if not m:
                     return self._send(404, {"error": "no such machine"})
-                sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
+                sub = " / ".join("%s %s" % (x["p"] or "未标", x["comm"]) for x in m["pcomms"])
                 png = qr_label_png("%s/?c=%s" % (_qr_origin(), code), m["name"])
                 body = png
                 self.send_response(200)
@@ -1587,6 +1598,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_photos(q))
             if p == "/api/bd/status":
                 return self._send(200, api_bd_status(q))
+            if p == "/api/manage/bd-sync/preview":
+                sid = (q.get("shop_id") or [""])[0] or (resolve_shop(actor()) or "")
+                days = int((q.get("days") or ["30"])[0])
+                return self._send(200, bd_sync_preview(sid, days))
             if p == "/api/manage/devices":
                 return self._send(200, api_manage_devices(q))
             if p == "/api/brand/list":
@@ -1694,6 +1709,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, save_shop(b))
             if p == "/api/manage/shop/remove":
                 return self._send(200, remove_shop(b["id"]))
+            if p == "/api/manage/bd-sync/apply":
+                sid = (b.get("shop_id") or "").strip() or (resolve_shop(actor()) or "")
+                return self._send(200, bd_sync_apply(sid, b.get("items") or []))
             if p == "/api/manage/unit/save":
                 r = save_unit(b)
                 ensure_codes()
@@ -1834,6 +1852,44 @@ def fill_group_names():
                           "(group_name IS NULL OR group_name='')", (grp, name))
 
 
+def _poss_from_map(pos: dict, comms) -> list:
+    """单卡头的机器没 P 位时按 P1（2026-11-26）。
+
+    """
+    vals = [pos.get(c, "") for c in (comms or [])]
+    if len(vals) == 1 and not vals[0]:
+        return ["P1"]
+    return vals
+
+def _poss_one(cno: dict, comms_sorted) -> list:
+    """单卡头的机器没录 P 位时按 P1 显示（2026-11-26 要求）。"""
+    vals = [cno.get(x) or "" for x in (comms_sorted or [])]
+    if len(vals) == 1 and not vals[0]:
+        return ["P1"]
+    return vals
+
+def pcomms_of(all_comms) -> list:
+    """把通讯ID列表变成 [{p: 'P3'|'', comm}]，P 位取 comms.console_no（墙上实际位置）。
+
+    没标的留空串，界面显示「未标」—— 以前按顺序硬编 P1..Pn，
+    设置页显示 P3=758516，核对页却是 P1，两处对不上（2026-11-26 修）。
+    """
+    ids = [str(c) for c in (all_comms or [])]
+    if not ids:
+        return []
+    with conn() as c:
+        rows = c.execute("SELECT comm_id, console_no FROM comms WHERE comm_id IN (%s)"
+                         % ",".join("?" * len(ids)), ids).fetchall()
+    pos = {str(r["comm_id"]): (r["console_no"] or "") for r in rows}
+    def _p(cid):
+        v = pos.get(cid, "")
+        return v or ("P1" if len(ids) == 1 else "")
+
+    items = [{"p": _p(cid), "comm": cid} for cid in ids]
+    items.sort(key=lambda x: (x["p"] or "~", x["comm"]))
+    return items
+
+
 def _machine_groups(shop_id: str) -> list:
     """按机台归组：一台机一个码，组里是它的各块码表（P1..Pn）"""
     with conn() as c:
@@ -1857,8 +1913,200 @@ def _machine_groups(shop_id: str) -> list:
         all_comms = sorted(cid for u in us for cid in (u.get("comms") or []))
         out.append({"kind": kind, "name": base, "units": us,
                     "code": us[0]["code"], "count": len(us),
-                    "pcomms": [{"p": i + 1, "comm": cid} for i, cid in enumerate(all_comms)]})
+                    "pcomms": pcomms_of(all_comms)})
     return out
+
+
+_BD_POS_CACHE: dict = {}          # shop_id -> (取的时刻, {comm: P位})，缓存 6 小时
+
+
+def bd_pos_matrix(shop_id: str, days: int = 30) -> dict:
+    """从宝点「下币汇总」收集 卡头 → P 位（consoleNo）。
+
+    只有下币记录里带 consoleNo，且只报当天有下币的设备，
+    所以扫最近 N 天，取每个卡头第一次出现的值。结果缓存 6 小时（扫一次约 12 秒）。
+    """
+    hit = _BD_POS_CACHE.get(shop_id)
+    if hit and time.time() - hit[0] < 6 * 3600:
+        return dict(hit[1])
+    shop = shop_of(shop_row(shop_id))
+    bd = baodian(shop_id)
+    pos: dict = {}
+    for i in range(1, max(1, days) + 1):
+        day = (date.today() - timedelta(days=i)).isoformat()
+        try:
+            rows = bd.fetch_down(shop, day)
+        except Exception:
+            continue
+        for r in rows:
+            cid = str(r.get("commId") or "")
+            cn = (r.get("consoleNo") or "").strip()
+            if cid and cn:
+                pos.setdefault(cid, cn)
+        time.sleep(0.2)
+    _BD_POS_CACHE[shop_id] = (time.time(), dict(pos))
+    return pos
+
+
+def sync_pos(shop_id: str, days: int = 30) -> dict:
+    """只同步 P 位（老按钮保留）：宝点怎么设，这里就怎么设。"""
+    pos = bd_pos_matrix(shop_id, days)
+    updated = 0
+    ts = now()
+    with conn() as c:
+        for cid, cn in pos.items():
+            cur = c.execute("SELECT console_no FROM comms WHERE comm_id=?", (cid,)).fetchone()
+            if not cur:
+                continue
+            if (cur["console_no"] or "") == cn:
+                continue
+            c.execute("UPDATE comms SET console_no=?, updated_at=? WHERE comm_id=?",
+                      (cn, ts, cid))
+            updated += 1
+        unknown = c.execute(
+            "SELECT COUNT(*) FROM comms m JOIN units u ON u.id=m.unit_id "
+            "WHERE u.shop_id=? AND (m.console_no IS NULL OR m.console_no='')",
+            (shop_id,)).fetchone()[0]
+    return {"ok": True, "scanned": len(pos), "updated": updated, "unknown": unknown}
+
+
+# 宝点「项目分组」→ 本地两类码表（2026-11-26 用户定）
+BD_PACHINKO_TEAMS = ("出珠弹珠机", "蓝票弹珠机")
+BD_PUSHER_TEAMS = ("中岛推币类", "其他推币机", "屏幕机", "连排推币机")
+
+
+def _bd_team(raw) -> str:
+    """projectTeamName 是 JSON 数组字符串，取第一个。"""
+    try:
+        v = json.loads(raw or "[]")
+        if isinstance(v, list) and v:
+            return str(v[0])
+        if isinstance(v, str):
+            return v
+    except Exception:
+        pass
+    return str(raw or "")
+
+
+def bd_device_list(shop_id: str) -> list:
+    """宝点设备清单，只留要写码表的两类（弹珠机 / 推币机）。"""
+    shop = shop_of(shop_row(shop_id))
+    bd = baodian(shop_id)
+    out = []
+    page = 0
+    while True:
+        j = bd.post("/terminals/terminal/getlist",
+                    {"page": page, "limit": 300, "filters": [], "sort": "desc",
+                     "sortField": "deviceOrderBy"}, shop)
+        rows = j.get("listData") or []
+        for x in rows:
+            team = _bd_team(x.get("projectTeamName"))
+            if team in BD_PACHINKO_TEAMS:
+                kind = "pachinko"
+            elif team in BD_PUSHER_TEAMS:
+                kind = "pusher"
+            else:
+                continue
+            comms = [c.strip() for c in str(x.get("commIds") or "").split(",") if c.strip()]
+            # 脏数据：宝点里有 commIds 是 "0" 的（彩虹王国），不是真卡头，跳过
+            comms = [c for c in comms if c.isdigit() and c != "0"]
+            if not comms:
+                continue
+            out.append({"bd_id": x.get("id"), "name": (x.get("deviceName") or "").strip(),
+                        "kind": kind, "team": team, "comms": comms,
+                        "enabled": bool(x.get("isEnabled"))})
+        page += 1
+        if page >= int(j.get("totalPage") or 1) or not rows:
+            break
+        time.sleep(0.2)
+    return out
+
+
+def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
+    """拉宝点机台清单 + P位，和本地比对，给出一张待同步表。"""
+    shop_id = guard_shop(shop_id)
+    devices = bd_device_list(shop_id)
+    pos = bd_pos_matrix(shop_id, days)
+    with conn() as c:
+        units = c.execute("SELECT id,name,kind,locked FROM units WHERE shop_id=? AND active=1",
+                          (shop_id,)).fetchall()
+        cmap = {}
+        for r in c.execute("SELECT m.comm_id, m.unit_id FROM comms m JOIN units u ON u.id=m.unit_id "
+                           "WHERE u.shop_id=?", (shop_id,)):
+            cmap.setdefault(r["unit_id"], set()).add(str(r["comm_id"]))
+
+    rows = []
+    for d in devices:
+        hit = next((u for u in units if cmap.get(u["id"], set()) & set(d["comms"])), None)
+        if not hit:
+            hit = next((u for u in units if (u["name"] or "").strip() == d["name"]), None)
+        local = None
+        status = "new"
+        if hit:
+            uc = sorted(cmap.get(hit["id"], set()))
+            same = ((hit["name"] or "").strip() == d["name"]
+                    and set(uc) == set(d["comms"]))
+            status = "same" if same else "update"
+            local = {"unit_id": hit["id"], "name": hit["name"], "kind": hit["kind"],
+                     "comms": uc, "locked": bool(hit["locked"])}
+        rows.append({"name": d["name"], "kind": d["kind"], "team": d["team"],
+                     "comms": d["comms"],
+                     "pos": _poss_from_map(pos, d["comms"]),
+                     "status": status, "local": local,
+                     "local_name": (local or {}).get("name"),
+                     "local_comms": (local or {}).get("comms") or [],
+                     "merge": bool(local and len(d["comms"]) > len(local.get("comms") or []))})
+
+    bd_comms = {c for d in devices for c in d["comms"]}
+    orphan = []
+    for u in units:
+        uc = cmap.get(u["id"], set())
+        if uc and not (uc & bd_comms):
+            orphan.append({"unit_id": u["id"], "name": u["name"], "kind": u["kind"],
+                           "comms": sorted(uc)})
+    return {"ok": True, "rows": rows, "orphan": orphan,
+            "pos_have": len(pos), "devices": len(devices), "days": days}
+
+
+def bd_sync_apply(shop_id: str, items: list) -> dict:
+    """把用户勾选的宝点机台写进本地：名称/类型/卡头/P位全部以宝点为准。"""
+    shop_id = guard_shop(shop_id)
+    created = updated = pos_n = merged = 0
+    for it in items or []:
+        name = (it.get("name") or "").strip()
+        kind = it.get("kind")
+        comms = [str(x).strip() for x in (it.get("comms") or []) if str(x).strip()]
+        if not name or kind not in ("pusher", "pachinko") or not comms:
+            continue
+        uid = it.get("unit_id")
+        # 这些卡头现在挂在哪些机台上：合并后如果它们空了，停用掉，不留空壳
+        with conn() as c:
+            marks = ",".join("?" * len(comms))
+            owners = {r["unit_id"] for r in c.execute(
+                "SELECT unit_id FROM comms WHERE comm_id IN (%s)" % marks, comms)}
+        res = save_unit({"shop_id": shop_id, "id": uid, "name": name, "kind": kind,
+                         "comms": comms, "shared": len(comms) > 1})
+        target = res["id"]
+        if uid:
+            updated += 1
+        else:
+            created += 1
+        with conn() as c:
+            for other in owners - {target}:
+                left = c.execute("SELECT COUNT(*) FROM comms WHERE unit_id=?",
+                                 (other,)).fetchone()[0]
+                if not left:
+                    c.execute("UPDATE units SET active=0, locked=1 WHERE id=?", (other,))
+                    merged += 1
+        pos = it.get("pos") or []
+        with conn() as c:
+            for cid, p in zip(comms, pos):
+                if p:
+                    c.execute("UPDATE comms SET console_no=?, updated_at=? WHERE comm_id=?",
+                              (p, now(), cid))
+                    pos_n += 1
+    return {"ok": True, "created": created, "updated": updated, "pos": pos_n, "merged": merged}
+
 
 
 QR_DESIGN = 3   # 贴纸版式版本，改一次 +1，图片 URL 跟着变，避免浏览器用旧缓存
@@ -1950,7 +2198,7 @@ def qr_zip(shop_id: str, codes: list) -> bytes:
             if not m:
                 continue
             url = "%s/?c=%s" % (origin, c)
-            sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
+            sub = " / ".join("%s %s" % (x["p"] or "未标", x["comm"]) for x in m["pcomms"])
             png = qr_label_png(c, url, m["name"], sub)
             base = "%s_%s" % (c, _safe_name(m["name"]))
             name = base + ".png"
@@ -1978,7 +2226,7 @@ def qr_page(shop_id: str, origin: str, pre: str = "") -> str:
     machines = _machine_groups(shop_id)
     cards = []
     for m in machines:
-        sub = " / ".join("P%d %s" % (x["p"], x["comm"]) for x in m["pcomms"])
+        sub = " / ".join("%s %s" % (x["p"] or "未标", x["comm"]) for x in m["pcomms"])
         cards.append(
             '<label class="qrc">'
             '<input type="checkbox" class="qrc__cb" value="%s">'
@@ -2481,7 +2729,7 @@ def manage_machines(shop_id: str) -> list:
             "brand": brand_of(units[0]) if (units[0].get("kind") == "pachinko") else None,
             "units": units,
             "comms": comms,
-            "pcomms": [{"p": i + 1, "comm": cid} for i, cid in enumerate(all_comms)],
+            "pcomms": pcomms_of(all_comms),
             "heads": len(comms),
             "merged": len(units) == 1 and len(comms) > 1,
             "shared": any(bool(u["shared"]) for u in units),
@@ -2684,7 +2932,7 @@ def save_machine(b: dict) -> dict:
             for cid in u["comms"]:
                 by_comm[cid] = u["id"]
         for cid in comms:
-            label = "%s %s" % (name, cid)
+            label = unique_unit_name(c, shop_id, name)
             uid = by_comm.get(cid)
             if uid:
                 c.execute("UPDATE units SET name=?, brand=?, shared=0, locked=1, active=1 "
@@ -2719,15 +2967,16 @@ def split_unit(uid: int) -> dict:
         if not u:
             raise RuntimeError("找不到这台机")
         guard_shop(u["shop_id"])
+        shop_id = u["shop_id"]
         comms = [r["comm_id"] for r in c.execute(
             "SELECT comm_id FROM comms WHERE unit_id=? ORDER BY comm_id", (uid,))]
         if len(comms) < 2:
             raise RuntimeError("只有一个卡头，不用拆")
         base = _re.sub(r"\s+\d{5,}$", "", u["name"]).strip() or u["name"]
-        first = "%s %s" % (base, comms[0])
+        first = unique_unit_name(c, shop_id, base, skip_id=uid)
         c.execute("UPDATE units SET name=?, shared=0, locked=0 WHERE id=?", (first, uid))
         for cid in comms[1:]:
-            label = "%s %s" % (base, cid)
+            label = unique_unit_name(c, shop_id, base)
             c.execute("INSERT INTO units(shop_id,name,team,shared,active) VALUES(?,?,?,0,1) "
                       "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, shared=0",
                       (u["shop_id"], label, u["team"]))

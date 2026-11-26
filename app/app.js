@@ -2148,7 +2148,7 @@ async function brandCfg() {
     const modeName = ({ swipe_bead_card: '刷卡出珠出卡', swipe_card: '刷卡出卡',
       bead_card: '投珠出卡', bead_out_card: '投珠出珠出卡' })[b.mode] || b.mode;
     row.appendChild(el('span', 'brand-row__mode',
-      modeName + (b.out_incl === false ? ' · 只计中奖' : ' · 含首出珠')));
+      modeName + (b.out_incl === false ? ' · 总出珠不含投币出珠' : ' · 总出珠含投币出珠')));
     const b2 = el('button', 'btn btn--sm btn--quiet brand-row__edit', '编辑');
     b2.type = 'button';
     b2.setAttribute('aria-label', '编辑品牌 ' + (b.label || b.brand));
@@ -2214,9 +2214,11 @@ function brandDialog(b) {
   };
 
   mkGroup('玩法', MODES, mode, (v) => { mode = v; });
-  mkGroup('总出珠计法', [['1', '含首出珠'], ['0', '只计中奖']], outIncl, (v) => { outIncl = v; });
+  mkGroup('总出珠怎么算', [['1', '含投币出珠'], ['0', '不含投币出珠']], outIncl,
+    (v) => { outIncl = v; });
   dlg.appendChild(el('p', 'brand-cfg__sub',
-    '含首出珠：投币换出的珠也算进总出珠。只计中奖：投币换出的珠不计数，总出珠就是中奖。'));
+    '含投币出珠：机器上显示的总出珠，把投币换出来的珠也算进去了。'
+    + '不含投币出珠：总出珠里只有中奖出的珠，投币换的不算。'));
 
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
@@ -2267,14 +2269,13 @@ function renderMachineView(card, g) {
   const ul = el('ul', 'machine__comms');
   ul.setAttribute('aria-label', g.key + ' 的卡头');
   const all = g.pcomms || [];
-  // 行里只报前两个，多了折成 +N，免得一串数字被切断
-  all.slice(0, 2).forEach((x) => {
+  // 全部列出来，一个都别藏；P 位用接口给的墙上位置，没标就写「未标」
+  all.forEach((x) => {
     const li = el('li', 'chip chip--pos');
-    li.appendChild(el('b', null, 'P' + x.p + '：'));
+    li.appendChild(el('b', null, (x.p || '未标') + '：'));
     li.appendChild(el('span', null, x.comm));
     ul.appendChild(li);
   });
-  if (all.length > 2) ul.appendChild(el('li', 'chip chip--pos chip--more', '+' + (all.length - 2)));
   card.appendChild(ul);
 
   const foot = el('footer', 'machine__foot');

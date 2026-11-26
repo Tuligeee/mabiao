@@ -256,7 +256,6 @@ def t_save_machine():
     with S.conn() as c:
         row = c.execute("SELECT name FROM units WHERE id=?", (uid,)).fetchone()
     truth(row["name"].startswith("壬弹珠机-001"), "名字要保留原名")
-    truth("M7001" in row["name"], "名字后面带上通讯ID（与宝点一致）")
 
 
 # ------------------------------------------------------------------ 核对附加
