@@ -3091,12 +3091,17 @@ def manage_machines(shop_id: str) -> list:
     import re as _re
     shop_id = guard_shop(shop_id)
     us = [u for u in manage_units(shop_id) if u.get("active")]
-    groups: dict[str, list] = {}
+    groups: dict = {}
     for u in us:
-        base = _re.sub(r"\s*\(\d+\)\s*$", "", _re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
-        groups.setdefault(base, []).append(u)
+        if u.get("machine_id"):
+            key = ("m", u["machine_id"], u.get("machine_name") or u["name"])
+        else:
+            base = _re.sub(r"\s*\(\d+\)\s*$", "", _re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
+            key = ("n", base, base)
+        groups.setdefault(key, []).append(u)
     out = []
-    for base, units in groups.items():
+    for (_, _, base), units in groups.items():
+        units.sort(key=lambda x: (x.get("pos") or 1, x["name"]))
         comms = [c["comm_id"] for u in units for c in u["comms"]]
         all_comms = sorted(str(c) for c in comms)
         out.append({
