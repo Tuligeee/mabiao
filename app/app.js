@@ -470,7 +470,8 @@ async function loadEntry() {
   if (S.role === 'store' && S.view === 'entry' && S.editDay) S.day = S.editDay;
   refreshBdState();
   const d = await api(`/api/entry?shop_id=${encodeURIComponent(S.shopId)}&day=${S.day}&kind=${S.kind}`);
-  S.allRows = groupByName(d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length })));
+  S.allRows = groupByName(d.rows.map((r) => Object.assign({}, r, { comm_count: r.comms.length })),
+    S.kind === 'pachinko');
   S.confirmed = !!d.confirmed;
   S.entry = S.allRows.filter((r) => r.active !== false);
 
@@ -523,7 +524,8 @@ function renderConfirm() {
     box.innerHTML = '<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     cb.appendChild(inp);
     cb.appendChild(box);
-    cb.appendChild(el('span', 'sheet__name', baseName(r.name) || r.name));
+    cb.appendChild(el('span', 'sheet__name',
+      (S.kind === 'pachinko') ? r.name : (baseName(r.name) || r.name)));
     li.appendChild(cb);
 
     const meta = [];
@@ -560,15 +562,16 @@ function baseName(n) {
   return String(n || '').replace(/\s*\(\d+\)\s*$/, '').replace(/\s+\d{5,}$/, '').trim();
 }
 
-/* 拆开的同名机台排在一起，组内按 P 位；不同机的先后保持原来的顺序 */
-function groupByName(rows) {
+/* 同名/同品牌的排在一起：推币机按机台名，弹珠机按品牌；组内按 P 位 */
+function groupByName(rows, isPach) {
+  const key = (r) => (isPach ? (r.brand || '未分品牌') : (baseName(r.name) || r.name));
   const order = new Map();
   rows.forEach((r) => {
-    const b = baseName(r.name);
+    const b = key(r);
     if (!order.has(b)) order.set(b, order.size);
   });
   const firstP = (r) => (((r.pcomms || [])[0] || {}).p || '');
-  rows.sort((a, b) => (order.get(baseName(a.name)) - order.get(baseName(b.name)))
+  rows.sort((a, b) => (order.get(key(a)) - order.get(key(b)))
     || String(firstP(a)).localeCompare(String(firstP(b)))
     || String(a.name).localeCompare(String(b.name)));
   return rows;
@@ -578,20 +581,25 @@ function renderEntry() {
   const ul = $('entryList');
   ul.innerHTML = '';
 
-  // 同一台机的几个卡头归成一组：组头写机台名，卡上只写 P 位 + 通讯ID
+  // 推币机：一台机（几个卡头）归一组，组头写机台名，卡上只写 P 位 + 通讯ID
+  // 弹珠机：按品牌分组，卡上写整台机名 + P 位：通讯ID
+  const isPach = S.kind === 'pachinko';
+  const groupKey = (r) => (isPach ? (r.brand || '未分品牌') : (baseName(r.name) || r.name));
   const counts = {};
   S.entry.forEach((r) => {
-    const b = baseName(r.name) || r.name;
+    const b = groupKey(r);
     counts[b] = (counts[b] || 0) + 1;
   });
   let lastBase = null;
 
   S.entry.forEach((r) => {
-    const base = baseName(r.name) || r.name;
+    const base = groupKey(r);
     if (base !== lastBase) {
       const gh = el('li', 'entry-group');
       gh.appendChild(el('span', 'entry-group__name', base));
-      if (counts[base] > 1) gh.appendChild(el('span', 'entry-group__n', counts[base] + ' 个卡头'));
+      const n = counts[base];
+      if (isPach) gh.appendChild(el('span', 'entry-group__n', n + ' 台'));
+      else if (n > 1) gh.appendChild(el('span', 'entry-group__n', n + ' 个卡头'));
       ul.appendChild(gh);
       lastBase = base;
     }
@@ -600,12 +608,16 @@ function renderEntry() {
     li.dataset.unit = String(r.unit_id);
 
     const id = el('div', 'lrow__id');
-    // 卡上官的就是「P位：通讯ID」；没有卡头记录才退回机台名/号码
     const pc = (r.pcomms || []).filter((x) => x && x.comm);
     const nm = /^(.*?)\s+(\d{5,})$/.exec(r.name || '');
+    if (isPach) {
+      // 品牌组下面：机台名 + 卡头
+      id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
+    }
     if (pc.length) {
       pc.forEach((x) => id.appendChild(el('span', 'lrow__comm', (x.p || '未标') + '：' + x.comm)));
-    } else {
+    } else if (!isPach) {
+      // 推币机没有卡头记录：退回机台名/号码
       id.appendChild(el('span', 'lrow__name', nm ? nm[1] : r.name));
       if (nm) id.appendChild(el('span', 'lrow__comm', nm[2]));
     }
