@@ -220,16 +220,23 @@ def resolve_shop(me: dict) -> str | None:
         shops = [dict(r) for r in c.execute(
             "SELECT id,name FROM shops WHERE COALESCE(group_name,'') NOT IN (%s)" % marks,
             tuple(HIDDEN_GROUPS))]
-        name = (me.get("name") or "").strip()
-        n = norm_store(name)
-        if not n:
-            return None
-
-        cands = [s for s in shops if norm_store(s["name"]) == n]
-        if not cands:
-            # 包含匹配：「鄂州」↔「鄂州吾悦」
-            cands = [s for s in shops
-                     if n in norm_store(s["name"]) or norm_store(s["name"]) in n]
+        # 任务平台的 name 是「杭州店」这种简称，brand 才是和码表一致的全名，
+        # 所以先拿 brand 匹配，再退回 name（2026-11-26 修：ST16 杭州店绑不上）
+        tries = [x for x in ((me.get("brand") or "").strip(), (me.get("name") or "").strip()) if x]
+        name = tries[-1] if tries else ""
+        cands = []
+        for cand_name in tries:
+            n = norm_store(cand_name)
+            if not n:
+                continue
+            cands = [s for s in shops if norm_store(s["name"]) == n]
+            if not cands:
+                # 包含匹配：「鄂州」↔「鄂州吾悦」
+                cands = [s for s in shops
+                         if n in norm_store(s["name"]) or norm_store(s["name"]) in n]
+            if len(cands) == 1:
+                name = cand_name
+                break
 
         if len(cands) == 1:
             c.execute("INSERT OR REPLACE INTO shop_map(cwsj_key,shop_id) VALUES(?,?)",

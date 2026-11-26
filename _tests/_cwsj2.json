@@ -1,0 +1,193 @@
+{
+ "列": [
+  "id",
+  "name",
+  "city",
+  "region_id",
+  "account",
+  "updated_at",
+  "payload_json"
+ ],
+ "行": [
+  {
+   "id": "ST01",
+   "name": "南昌一店",
+   "city": "南昌",
+   "region_id": "RG1",
+   "account": "nanchang1",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST01\",\"code\":\"S001\",\"name\":\"南昌一店\",\"brand\":\"慢车道-南昌T16店\",\"city\":\"南昌\",\"addr\":\"\",\"mgr\":\"张文华\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG1\",\"enabled\":true,\"account\":\"nanchang1\",\"type\":\"store\",\"dingDeptId\":920875389,\"memberCount\":14}"
+  },
+  {
+   "id": "ST02",
+   "name": "南昌二店",
+   "city": "南昌",
+   "region_id": "RG1",
+   "account": "nanchang2",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST02\",\"code\":\"S002\",\"name\":\"南昌二店\",\"brand\":\"纯玩世界欢乐中心(南昌大悦城店)\",\"city\":\"南昌\",\"addr\":\"\",\"mgr\":\"张文华\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG1\",\"enabled\":true,\"account\":\"nanchang2\",\"type\":\"store\",\"dingDeptId\":994137640,\"memberCount\":17}"
+  },
+  {
+   "id": "ST03",
+   "name": "苏州一店",
+   "city": "苏州",
+   "region_id": "RG2",
+   "account": "suzhou1",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST03\",\"code\":\"S003\",\"name\":\"苏州一店\",\"brand\":\"慢车道-苏州高铁吾悦店\",\"city\":\"苏州\",\"addr\":\"\",\"mgr\":\"张祥\",\"phone\":\"123\",\"openDays\":0,\"regionId\":\"RG2\",\"enabled\":true,\"account\":\"suzhou1\",\"type\":\"store\",\"dingDeptId\":856574479,\"memberCount\":14}"
+  },
+  {
+   "id": "ST04",
+   "name": "苏州二店",
+   "city": "苏州",
+   "region_id": "RG2",
+   "account": "suzhou2",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST04\",\"code\":\"S004\",\"name\":\"苏州二店\",\"brand\":\"慢车道-苏州龙湖店\",\"city\":\"苏州\",\"addr\":\"\",\"mgr\":\"张建峰\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG2\",\"enabled\":true,\"account\":\"suzhou2\",\"type\":\"store\",\"dingDeptId\":921861097,\"memberCount\":20}"
+  },
+  {
+   "id": "ST05",
+   "name": "苏州三店",
+   "city": "苏州",
+   "region_id": "RG2",
+   "account": "suzhou3",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST05\",\"code\":\"S005\",\"name\":\"苏州三店\",\"brand\":\"夹机同学(苏州相城大悦城店)\",\"city\":\"苏州\",\"addr\":\"\",\"mgr\":\"张绍威\",\"phone\":\"18595582025\",\"openDays\":0,\"regionId\":\"RG2\",\"enabled\":true,\"account\":\"suzhou3\",\"type\":\"store\",\"dingDeptId\":1089622123,\"memberCount\":11}"
+  },
+  {
+   "id": "ST06",
+   "name": "滁州店",
+   "city": "滁州",
+   "region_id": "RG3",
+   "account": "chuzhou",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST06\",\"code\":\"S006\",\"name\":\"滁州店\",\"brand\":\"慢车道-滁州金鹏玖玖店\",\"city\":\"滁州\",\"addr\":\"\",\"mgr\":\"陈子夜\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG3\",\"enabled\":true,\"account\":\"chuzhou\",\"type\":\"store\",\"dingDeptId\":131924816,\"memberCount\":19}"
+  },
+  {
+   "id": "ST07",
+   "name": "威海店",
+   "city": "威海",
+   "region_id": "RG3",
+   "account": "weihai",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST07\",\"code\":\"S007\",\"name\":\"威海店\",\"brand\":\"乐掌门-威海万达店\",\"city\":\"威海\",\"addr\":\"\",\"mgr\":\"李少华\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG3\",\"enabled\":true,\"account\":\"weihai\",\"type\":\"store\",\"dingDeptId\":986980749,\"memberCount\":10}"
+  },
+  {
+   "id": "ST08",
+   "name": "潍坊店",
+   "city": "潍坊",
+   "region_id": "RG3",
+   "account": "weifang",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST08\",\"code\":\"S008\",\"name\":\"潍坊店\",\"brand\":\"乐掌门潍坊万达店\",\"city\":\"潍坊\",\"addr\":\"\",\"mgr\":\"龙云\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG3\",\"enabled\":true,\"account\":\"weifang\",\"type\":\"store\",\"dingDeptId\":986997725,\"memberCount\":12}"
+  },
+  {
+   "id": "ST09",
+   "name": "泰安店",
+   "city": "泰安",
+   "region_id": "RG3",
+   "account": "taian",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST09\",\"code\":\"S009\",\"name\":\"泰安店\",\"brand\":\"乐掌门泰安万达广场店\",\"city\":\"泰安\",\"addr\":\"\",\"mgr\":\"崔传玉\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG3\",\"enabled\":true,\"account\":\"taian\",\"type\":\"store\",\"dingDeptId\":987797165,\"memberCount\":15}"
+  },
+  {
+   "id": "ST10",
+   "name": "鄂州店",
+   "city": "鄂州",
+   "region_id": "RG3",
+   "account": "ezhou",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST10\",\"code\":\"S010\",\"name\":\"鄂州店\",\"brand\":\"\",\"city\":\"鄂州\",\"addr\":\"\",\"mgr\":\"黄帅珽\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG3\",\"enabled\":true,\"account\":\"ezhou\",\"type\":\"store\",\"dingDeptId\":1085466579,\"memberCount\":14}"
+  },
+  {
+   "id": "ST11",
+   "name": "余干店",
+   "city": "余干",
+   "region_id": "RG4",
+   "account": "yugan",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST11\",\"code\":\"S011\",\"name\":\"余干店\",\"brand\":\"慢车道-余干天虹店\",\"city\":\"余干\",\"addr\":\"\",\"mgr\":\"姜伟\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"yugan\",\"type\":\"store\",\"dingDeptId\":63665778,\"memberCount\":13}"
+  },
+  {
+   "id": "ST12",
+   "name": "浏阳一店",
+   "city": "浏阳",
+   "region_id": "RG4",
+   "account": "liuyang1",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST12\",\"code\":\"S012\",\"name\":\"浏阳一店\",\"brand\":\"\",\"city\":\"浏阳\",\"addr\":\"\",\"mgr\":\"卢坤\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"liuyang1\",\"type\":\"store\",\"dingDeptId\":72291648,\"memberCount\":16}"
+  },
+  {
+   "id": "ST13",
+   "name": "成都一店",
+   "city": "成都",
+   "region_id": "RG4",
+   "account": "chengdu1",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST13\",\"code\":\"S013\",\"name\":\"成都一店\",\"brand\":\"慢车道-成都犀浦万达店\",\"city\":\"成都\",\"addr\":\"\",\"mgr\":\"刘小龙\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"chengdu1\",\"type\":\"store\",\"dingDeptId\":131754935,\"memberCount\":9}"
+  },
+  {
+   "id": "ST14",
+   "name": "萍乡店",
+   "city": "萍乡",
+   "region_id": "RG4",
+   "account": "pingxiang",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST14\",\"code\":\"S014\",\"name\":\"萍乡店\",\"brand\":\"慢车道-萍乡天虹店\",\"city\":\"萍乡\",\"addr\":\"\",\"mgr\":\"陈壮\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"pingxiang\",\"type\":\"store\",\"dingDeptId\":131876834,\"memberCount\":11}"
+  },
+  {
+   "id": "ST15",
+   "name": "成都二店",
+   "city": "成都",
+   "region_id": "RG4",
+   "account": "chengdu2",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST15\",\"code\":\"S015\",\"name\":\"成都二店\",\"brand\":\"慢车道-成都凯德天府店\",\"city\":\"成都\",\"addr\":\"\",\"mgr\":\"魏鹏飞\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"chengdu2\",\"type\":\"store\",\"dingDeptId\":892376913,\"memberCount\":14}"
+  },
+  {
+   "id": "ST16",
+   "name": "杭州店",
+   "city": "杭州",
+   "region_id": "RG4",
+   "account": "hangzhou",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST16\",\"code\":\"S016\",\"name\":\"杭州店\",\"brand\":\"纯玩世界杭州大悦城店\",\"city\":\"杭州\",\"addr\":\"\",\"mgr\":\"李泉泉\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"hangzhou\",\"type\":\"store\",\"dingDeptId\":1032201296,\"memberCount\":8}"
+  },
+  {
+   "id": "ST17",
+   "name": "武汉一店",
+   "city": "武汉",
+   "region_id": "RG4",
+   "account": "wuhan1",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST17\",\"code\":\"S017\",\"name\":\"武汉一店\",\"brand\":\"\",\"city\":\"武汉\",\"addr\":\"\",\"mgr\":\"成玲\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"wuhan1\",\"type\":\"store\",\"dingDeptId\":1041934203,\"memberCount\":9}"
+  },
+  {
+   "id": "ST18",
+   "name": "浏阳二店",
+   "city": "浏阳",
+   "region_id": "RG4",
+   "account": "liuyang2",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST18\",\"code\":\"S018\",\"name\":\"浏阳二店\",\"brand\":\"\",\"city\":\"浏阳\",\"addr\":\"\",\"mgr\":\"唐林\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"liuyang2\",\"type\":\"store\",\"dingDeptId\":1116834842,\"memberCount\":9}"
+  },
+  {
+   "id": "ST19",
+   "name": "武汉二店",
+   "city": "武汉",
+   "region_id": "RG4",
+   "account": "wuhan2",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"id\":\"ST19\",\"code\":\"S019\",\"name\":\"武汉二店\",\"brand\":\"\",\"city\":\"武汉\",\"addr\":\"\",\"mgr\":\"汪俊琳\",\"phone\":\"\",\"openDays\":0,\"regionId\":\"RG4\",\"enabled\":true,\"account\":\"wuhan2\",\"type\":\"store\",\"dingDeptId\":1121961282,\"memberCount\":10}"
+  },
+  {
+   "id": "ST21",
+   "name": "苏州四店",
+   "city": "苏州",
+   "region_id": "RG2",
+   "account": "suzhou4",
+   "updated_at": "2026-11-26T10:06:18.344Z",
+   "payload_json": "{\"name\":\"苏州四店\",\"city\":\"苏州\",\"addr\":\"\",\"mgr\":\"舒郎春\",\"phone\":\"17707931567\",\"account\":\"suzhou4\",\"regionId\":\"RG2\",\"type\":\"store\",\"enabled\":true,\"id\":\"ST21\",\"joinedAt\":\"2026-11-23\",\"code\":\"S020\"}"
+  }
+ ]
+}
