@@ -2110,6 +2110,36 @@ def bd_pos_matrix(shop_id: str, days: int = 30) -> dict:
     return pos
 
 
+def bd_pos_deep(shop_id: str, need: set, days: int = 180) -> dict:
+    """近 30 天扫不到 P 位的卡头，再往前翻到 days 天补（机器停开一段时间很常见）。
+
+    只在还有卡头没 P 位时调用；已经扫到的值不动。
+    """
+    hit = _BD_POS_CACHE.get(shop_id)
+    pos = dict(hit[1]) if hit else {}
+    missing = {c for c in (need or set()) if str(c) not in pos}
+    if not missing:
+        return pos
+    shop = shop_of(shop_row(shop_id))
+    bd = baodian(shop_id)
+    for i in range(31, max(31, days) + 1):
+        day = (date.today() - timedelta(days=i)).isoformat()
+        try:
+            rows = bd.fetch_down(shop, day)
+        except Exception:
+            continue
+        for r in rows:
+            cid = str(r.get("commId") or "")
+            cn = (r.get("consoleNo") or "").strip()
+            if cid and cn:
+                pos.setdefault(cid, cn)
+        if missing <= set(pos):
+            break
+        time.sleep(0.2)
+    _BD_POS_CACHE[shop_id] = (time.time(), dict(pos))
+    return pos
+
+
 def sync_pos(shop_id: str, days: int = 30) -> dict:
     """只同步 P 位（老按钮保留）：宝点怎么设，这里就怎么设。"""
     pos = bd_pos_matrix(shop_id, days)
@@ -2197,6 +2227,10 @@ def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
     shop_id = guard_shop(shop_id)
     devices = bd_device_list(shop_id)
     pos = bd_pos_matrix(shop_id, days)
+    # 近 30 天没下币的机台（长期停开）再往前翻 180 天，别让它们一直显示「未标」
+    need = {c for d in devices for c in d["comms"]}
+    if need - set(pos):
+        pos = bd_pos_deep(shop_id, need)
     with conn() as c:
         units = c.execute("SELECT id,name,kind,locked FROM units WHERE shop_id=? AND active=1",
                           (shop_id,)).fetchall()
