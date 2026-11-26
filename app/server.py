@@ -1746,7 +1746,8 @@ class Handler(BaseHTTPRequestHandler):
                     # 纯手工店没有卡头，不需要跟任何系统取数
                     return self._send(200, {"ok": True, "provider": "manual",
                                             "skipped": "纯手工门店，不用取数"})
-                if prov != "jingjian":
+                # 宝点上币只对宝点店做；鲸舰/世软走各自的机台汇总
+                if prov not in ("jingjian", "shiruan"):
                     devices = baodian(sid).fetch_up(shop_of(shop_row(sid)), day)
                     sync_units(sid, devices)
                 r = fetch_day(sid, day)
@@ -3124,7 +3125,7 @@ def api_shop_provider(b) -> dict:
     sid = guard_shop(b["shop_id"])
     prov = (b.get("provider") or "").strip()
     if prov not in dict(PROVIDERS):
-        raise RuntimeError("取数方式只能是 baodian / jingjian / manual")
+        raise RuntimeError("取数方式只能是 baodian / jingjian / shiruan / manual")
     with conn() as c:
         c.execute("UPDATE shops SET provider=? WHERE id=?", (prov, sid))
     return {"ok": True, "provider": prov}
