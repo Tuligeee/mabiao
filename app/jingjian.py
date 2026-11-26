@@ -18,6 +18,8 @@ import urllib.request
 TOKEN_FILE = os.environ.get("JJ_TOKEN_FILE") or "/opt/taocan/.cache/jingjian.json"
 DEFAULT_BASE = os.environ.get("JJ_BASE") or "http://jt.jingjianx.vip"
 JSON_KW = {"separators": (",", ":"), "ensure_ascii": False}
+CRED_FILE = os.environ.get("BD_CRED_FILE") or "/opt/taocan/.cache/baodian_account.json"
+JT = os.environ.get("JJ_LOGIN_BASE") or "http://jt.jingjianx.vip"
 NONCE = "mabiao01"
 
 
@@ -84,8 +86,50 @@ def _request(base: str, method: str, path_qs: str, body=None, token: str = "") -
         raise JingjianError("鲸舰网络异常: %s" % (e.reason,))
 
 
-def token(base: str = DEFAULT_BASE, shop_id: str = "") -> str:
-    """取某家店的可用 token（鲸舰 token 绑店，一店一份）；过期就 refresh。"""
+def _creds() -> tuple:
+    with open(CRED_FILE, encoding="utf-8") as f:
+        d = json.load(f)
+    return (d.get("username") or "").strip(), d.get("password") or ""
+
+
+def login_shop(shop_id, chain_id, base: str = "") -> str:
+    """账密直登换某家店 token：登录 → 切集团 → 选门店拿 authCode → 换门店 token。
+
+    鲸舰的 token 分两层：账号 token 调不了数据，必须换成门店 token。
+    """
+    user, pwd = _creds()
+    if not user or not pwd:
+        raise JingjianError("没有鲸舰账号凭据：%s" % CRED_FILE)
+    body = {"deviceId": "mabiao", "userName": user, "password": pwd,
+            "rightKey": "1", "metaType": 1, "authScene": 2, "remark": "码表核对"}
+    r = _request(JT, "POST", "/basic/login/account", body, token="")
+    if not r.get("success"):
+        raise JingjianError("鲸舰登录失败：%r" % (r.get("msg"),))
+    tok = (r.get("data") or {}).get("token") or ""
+    if not tok:
+        raise JingjianError("鲸舰登录没返回 token")
+    if chain_id:
+        sw = _request(JT, "POST", "/basic/login/switch/chain", {"chainId": int(chain_id)}, token=tok)
+        tok = (sw.get("data") or {}).get("token") or tok
+    sp = _request(JT, "POST", "/basic/login/shop",
+                  {"chainId": int(chain_id or 0), "shopId": int(shop_id)}, token=tok)
+    auth = (sp.get("data") or {}).get("authCode") or ""
+    if not auth:
+        raise JingjianError("鲸舰选门店失败：%r" % (sp.get("msg"),))
+    host = base or (sp.get("data") or {}).get("url") or ""
+    acr = _request(host, "POST", "/basic/manager/login/authcode", {"authCode": auth}, token=tok)
+    shop_tok = (acr.get("data") or {}).get("token") or ""
+    if not shop_tok:
+        raise JingjianError("鲸舰换门店 token 失败：%r" % (acr.get("msg"),))
+    d = _load()
+    d.setdefault("tokens", {})[str(shop_id)] = {
+        "token": shop_tok, "saved_at": time.time(), "base": host, "chain_id": chain_id}
+    _save(d)
+    return shop_tok
+
+
+def token(base: str = DEFAULT_BASE, shop_id: str = "", chain_id: str = "") -> str:
+    """取某家店的可用 token（鲸舰 token 绑店，一店一份）；过期就 refresh，refresh 不行就账密重登。"""
     d = _load()
     key = str(shop_id or "")
     ent = (d.get("tokens") or {}).get(key) or {}
@@ -102,6 +146,8 @@ def token(base: str = DEFAULT_BASE, shop_id: str = "") -> str:
     if tok and fresh:
         return tok
     if not tok:
+        if chain_id:
+            return login_shop(shop_id, chain_id, base)
         raise JingjianError("鲸舰 token 未初始化（需要贴一次 HAR 里的 token）")
     r = None
     for path in ("/basic/account/refresh/token", "/basic/login/refresh/token"):
@@ -111,11 +157,11 @@ def token(base: str = DEFAULT_BASE, shop_id: str = "") -> str:
                 break
         except JingjianError:
             continue
-    if r is None:
-        raise JingjianError("鲸舰 token 续期失败：两个 refresh 路径都不通")
-    new = (r.get("data") or {}).get("token")
-    if not r.get("success") or not new:
-        raise JingjianError("鲸舰 token 续期失败: %r" % (r.get("msg"),))
+    new = (r or {}).get("data", {}).get("token") if r else None
+    if not r or not r.get("success") or not new:
+        if chain_id:
+            return login_shop(shop_id, chain_id, base)
+        raise JingjianError("鲸舰 token 续期失败: %r" % ((r or {}).get("msg"),))
     d.setdefault("tokens", {})[key] = {"token": new, "saved_at": time.time(), "base": base}
     _save(d)
     return new
@@ -129,13 +175,20 @@ def save_initial(tok: str, base: str = DEFAULT_BASE, shop_id: str = "") -> dict:
     return {"ok": True, "shop_id": str(shop_id or "")}
 
 
-def day_summary(base: str, shop_id, day: str) -> list:
+def day_summary(base: str, shop_id, day: str, chain_id: str = "") -> list:
     """一天一店的机台汇总 → [{machine, coins, count}]。"""
-    tok = token(base, shop_id)
+    tok = token(base, shop_id, chain_id)
     body = {"startDate": day, "endDate": day, "KindIdStr": "", "isCalculate": True}
-    r = _request(base, "POST", "/device/manager/machineplaylog/getsummarylist", body, token=tok)
-    if not r.get("success"):
-        raise JingjianError("鲸舰汇总接口失败: %r" % (r.get("msg"),))
+    try:
+        r = _request(base, "POST", "/device/manager/machineplaylog/getsummarylist", body, token=tok)
+        if not r.get("success"):
+            raise JingjianError("鲸舰汇总接口失败: %r" % (r.get("msg"),))
+    except JingjianError as exc:
+        # token 被服务端拒了（过期/换设备）→ 用账密重登一次再试
+        if "401" not in str(exc) or not chain_id:
+            raise
+        tok = login_shop(shop_id, chain_id, base)
+        r = _request(base, "POST", "/device/manager/machineplaylog/getsummarylist", body, token=tok)
     rows = r.get("data") or []
     out = []
     for x in rows:

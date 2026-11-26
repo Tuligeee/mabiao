@@ -386,7 +386,7 @@ def t_jingjian_fetch():
     import types
     fake = types.ModuleType("jingjian")
     fake.DEFAULT_BASE = "http://fake"
-    fake.day_summary = lambda base, shop, day: [
+    fake.day_summary = lambda base, shop, day, chain="": [
         {"machine": "未弹珠机-001", "coins": 4400, "count": 45},
         {"machine": "娃娃机-001", "coins": 300, "count": 3},
     ]
