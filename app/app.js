@@ -838,7 +838,7 @@ function photoBox(row, shopId, day, poi) {
   thumb.addEventListener('click', () => {
     const live = row.photos.filter((p) => !p.expired);
     if (!live.length) { file.click(); return; }
-    openViewer(live, live.length - 1, row.name);
+    openViewer(live, 0, row.name);   // 从第一张开始看
   });
   thumb.appendChild(img);
   thumb.appendChild(badge);
@@ -907,7 +907,16 @@ function openViewer(list, start, title) {
       if (!blob || !navigator.canShare) return false;
       const file = new File([blob], name, { type: 'image/jpeg' });
       if (!navigator.canShare({ files: [file] })) return false;
-      navigator.share({ files: [file], title: name }).catch(() => {});
+      navigator.share({ files: [file], title: name })
+        .then(() => {
+          toast('已保存到相册');
+          dl.textContent = '已保存 ✓';
+          setTimeout(() => { dl.textContent = '保存到相册'; }, 2000);
+        })
+        .catch((e) => {
+          if (e && e.name === 'AbortError') return;      // 用户自己取消了
+          toast('没存上，长按图片也能存', 'bad');
+        });
       return true;
     };
     if (tryShare()) return;

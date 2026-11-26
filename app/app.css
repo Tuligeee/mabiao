@@ -438,7 +438,7 @@ body {
   padding: var(--space-3) var(--space-5);
   font-size: var(--text-sm); color: var(--ink);
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop); z-index: 70;
+  box-shadow: var(--shadow-pop); z-index: 120;   /* 要盖得住看大图的遮罩 */
   animation: rise var(--duration-base) var(--ease-out);
 }
 .toast[data-tone="bad"] { color: var(--bad); border-color: var(--color-feedback-error-border); background: var(--bad-bg); }
@@ -1451,6 +1451,7 @@ body[data-scanning="1"] { overflow: hidden; }
     padding: 10px 22px; border-radius: 999px; background: #fff; color: #111;
   }
 }
+
 
 
 
