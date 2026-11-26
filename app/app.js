@@ -59,6 +59,81 @@ async function api(path, body) {
 
 const toast = UI.toast;
 
+/* ------------------------------------------------------------ 历史栈
+   视图 = 一条历史；面板只登记，不占历史（返回先关面板再退视图）。 */
+const VIEWS = ['home', 'entry', 'recon', 'overview', 'settings', 'scan'];
+const HIST = { promptTs: 0, ready: false };
+const DLGS = [];                      // 打开着的面板，后进先出
+
+function trackDlg(close) {
+  if (DLGS.indexOf(close) < 0) DLGS.push(close);
+}
+
+function untrackDlg(close) {
+  const i = DLGS.indexOf(close);
+  if (i >= 0) DLGS.splice(i, 1);
+}
+
+function viewFromHash() {
+  const h = (location.hash || '').replace(/^#/, '');
+  return VIEWS.indexOf(h) >= 0 ? h : null;
+}
+
+function histUrl(v) {
+  return location.pathname + '#' + v;
+}
+
+function pushView(v, replace) {
+  if (!HIST.ready) return;
+  const st = history.state || {};
+  if (replace || st.view === v) {
+    history.replaceState({ view: v, nav: true }, '', histUrl(v));
+    return;
+  }
+  history.pushState({ view: v, nav: true }, '', histUrl(v));
+}
+
+// 开局：栈底放一条「页面自身」，上面再压一条挡板，第一次返回才有得退
+function initHistory(startView) {
+  histRestore(startView);
+  history.pushState({ hold: true, view: startView }, '', histUrl(startView));
+  HIST.ready = true;
+}
+
+// 不带参数的历史操作，避免 pushView 又改地址
+function histRestore(v) {
+  history.replaceState({ view: v }, '', histUrl(v));
+}
+
+window.addEventListener('popstate', (e) => {
+  const st = e.state || {};
+  // 1) 有面板开着 → 先关面板，位置补回来，用户不用多按一次
+  if (DLGS.length) {
+    const close = DLGS.pop();
+    try { close(); } catch (err) { /* 面板已卸载就算了 */ }
+    history.pushState({ view: S.view, nav: true }, '', histUrl(S.view));
+    return;
+  }
+  // 2) 还停在本应用的某一条视图记录上
+  if (st.nav && st.view && VIEWS.indexOf(st.view) >= 0) {
+    setView(st.view, { silent: true });
+    return;
+  }
+  if (st.hold && st.view) {
+    setView(st.view, { silent: true });
+    return;
+  }
+  // 3) 栈底：第一次提示，两秒内再按才真退出
+  const now = Date.now();
+  if (now - HIST.promptTs < 2000) {
+    history.back();
+    return;
+  }
+  HIST.promptTs = now;
+  toast('再按一次退出');
+  history.pushState({ hold: true, view: S.view }, '', histUrl(S.view));
+});
+
 /* ------------------------------------------------------------ 视图 */
 function syncDayLock() {
   const wrap = $('dayPick');
@@ -71,7 +146,8 @@ function syncDayLock() {
   wrap.hidden = !show;
 }
 
-function setView(v) {
+function setView(v, opts) {
+  opts = opts || {};
   S.view = v;
   syncDayLock();
   ['home', 'entry', 'recon', 'overview', 'settings', 'scan'].forEach((k) => {
@@ -86,6 +162,7 @@ function setView(v) {
   if (v === 'recon') loadRecon();
   if (v === 'overview') loadOverview();
   if (v === 'settings') loadSettings();
+  if (!opts.silent) pushView(v, opts.replace);
 }
 
 function welcomeDialog(b) {
@@ -1242,6 +1319,7 @@ function reasonDialog(r) {
   dlg.appendChild(acts);
   scrim.appendChild(dlg);
   document.body.appendChild(scrim);
+  trackDlg(closeBrand);
   save.focus();
 }
 
@@ -1585,8 +1663,17 @@ async function renderUnits() {
 let ADD_KIND = null;
 let ADD_BRAND = null;
 
+
+function closeAddPanel() {
+  untrackDlg(closeAddPanel);
+  ADD_KIND = null;
+  ADD_BRAND = null;
+  renderUnits();
+}
+
 function addMachineForm(kind) {
   const box = el('div', 'add-panel');
+  trackDlg(closeAddPanel);
 
   // ---------- 品牌 ----------
   let getBrand = () => undefined;
@@ -1640,7 +1727,7 @@ function addMachineForm(kind) {
   addSel.disabled = true;
   const closeBtn = el('button', 'btn btn--quiet', '取消');
   closeBtn.type = 'button';
-  closeBtn.addEventListener('click', () => { ADD_KIND = null; ADD_BRAND = null; renderUnits(); });
+  closeBtn.addEventListener('click', closeAddPanel);
   foot.appendChild(addSel);
   foot.appendChild(closeBtn);
   box.appendChild(foot);
@@ -1747,6 +1834,7 @@ function addMachineForm(kind) {
       } catch (e) { /* 单台失败不影响其他 */ }
     }
     toast('已添加 ' + ok + ' 台');
+    untrackDlg(closeAddPanel);
     ADD_KIND = null;
     ADD_BRAND = null;
     BRANDS = null;
@@ -1854,6 +1942,7 @@ function addMachineForm(kind) {
         shared: parts.length > 1,
       });
       toast('已新增');
+      untrackDlg(closeAddPanel);
       ADD_KIND = null;
       ADD_BRAND = null;
       BRANDS = null;
@@ -2024,7 +2113,8 @@ function brandDialog(b) {
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
   cancel.type = 'button';
-  cancel.addEventListener('click', () => scrim.remove());
+  const closeBrand = () => { untrackDlg(closeBrand); scrim.remove(); };
+  cancel.addEventListener('click', closeBrand);
   const save = el('button', 'btn btn--primary', '保存');
   save.type = 'button';
   save.addEventListener('click', async () => {
@@ -2034,7 +2124,7 @@ function brandDialog(b) {
         { brand: b.brand, label: nameIn.value.trim() || b.brand, mode, unit,
           per_coin: perCoin });
       BRANDS = null;
-      scrim.remove();
+      closeBrand();
       await renderUnits();
       await loadEntry();
       if (S.view === 'recon') await loadRecon();
@@ -2502,16 +2592,19 @@ async function boot() {
     S.kind = scanHit.kind;
     const firstRow = (scanHit.rows || [])[0];
     if (firstRow) S.pendingUnit = firstRow.unit_id;
-    history.replaceState(null, '', location.pathname);
+    history.replaceState({ view: 'entry', nav: true }, '', location.pathname + '#entry');
   }
 
+  // 刷新回原页：地址栏里的 #view 优先，其次是扫码进来的填写页
+  const startView = (S.pendingUnit ? 'entry' : null) || viewFromHash() || 'home';
+  initHistory(startView);
   if (S.pendingUnit) {
-    setView('entry');
+    setView('entry', { silent: true });
     await loadEntry();
     focusUnit(S.pendingUnit);
     S.pendingUnit = null;
   } else {
-    setView('home');
+    setView(startView, { silent: true });
     await loadEntry();
   }
 }
@@ -2580,7 +2673,8 @@ function bdQrDialog(pre) {
   let timer = null;
   let sid = null;
   const stop = () => { if (timer) clearInterval(timer); timer = null; };
-  const close = () => { stop(); scrim.remove(); };
+  const close = () => { stop(); untrackDlg(close); scrim.remove(); };
+  trackDlg(close);
 
   cancel.addEventListener('click', close);
 
@@ -2673,7 +2767,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnFetchAll').addEventListener('click', fetchAll);
   $('btnImportShops').addEventListener('click', importShops);
   $('btnBackShops').addEventListener('click', loadSettings);
-  $('btnScanBack').addEventListener('click', () => { location.href = BASE; });
+  $('btnScanBack').addEventListener('click', () => {
+    if (HIST.ready && history.length > 1) history.back();
+    else setView('home');
+  });
   $('btnScan').addEventListener('click', openScanner);
   $('scanClose').addEventListener('click', stopScanner);
   $('scanFile').addEventListener('change', (e) => {

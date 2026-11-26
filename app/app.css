@@ -1385,8 +1385,10 @@ body[data-scanning="1"] { overflow: hidden; }
   display: grid; place-items: center; overflow: hidden;
 }
 .vw__img {
-  max-inline-size: 100%; max-block-size: 100%;
-  inline-size: auto; block-size: auto; object-fit: contain; display: block;
+  /* 绝对定位铺满图片区再 contain：grid/flex 里百分比尺寸会退化成 auto，图会按原始高度溢出 */
+  position: absolute; inset: 0;
+  inline-size: 100%; block-size: 100%;
+  object-fit: contain; display: block;
 }
 .vw__nav, .vw__close, .vw__count, .vw__dl { z-index: 2; }
 .vw__count {
@@ -1414,13 +1416,31 @@ body[data-scanning="1"] { overflow: hidden; }
 
 @media (max-width: 47.99em) {
   .vw { background: #000; }
-  .vw__box { inline-size: 100vw; block-size: 100vh; padding: 0; border-radius: 0; background: #000; }
-  .vw__stage { inset: 0; }
-  .vw__img { max-inline-size: 100vw; max-block-size: 100vh; }
-  .vw__close { color: #fff; background: rgba(255,255,255,.12); border-color: transparent; }
-  .vw__count { inset-block-end: 84px; background: rgba(255,255,255,.12); color: #fff; }
+  /* iOS 的 100vh 比可见区域高，居中后图会被挤偏、上面留一大片黑。
+     改成 fixed + inset:0：直接贴着可见区域四边，地址栏收放也不跑偏 */
+  .vw__box {
+    position: fixed; inset: 0;
+    inline-size: auto; block-size: auto;
+    padding: 0; border-radius: 0; background: #000;
+  }
+  .vw__stage {
+    position: absolute; inset: 0;
+    padding-block: max(env(safe-area-inset-top), 8px) max(env(safe-area-inset-bottom), 8px);
+  }
+  .vw__img { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+  .vw__close {
+    inset-block-start: calc(12px + env(safe-area-inset-top));
+    color: #fff; background: rgba(255,255,255,.14); border-color: transparent;
+  }
+  .vw__count {
+    inset-block-end: calc(84px + env(safe-area-inset-bottom));
+    background: rgba(255,255,255,.14); color: #fff;
+  }
   .vw__dl {
-    inset-block-end: 24px; inset-inline: auto; inset-inline-start: 50%; transform: translateX(-50%);
+    inset-block-end: calc(24px + env(safe-area-inset-bottom));
+    inset-inline: auto; inset-inline-start: 50%; transform: translateX(-50%);
     padding: 10px 22px; border-radius: 999px; background: #fff; color: #111;
   }
 }
+
+
