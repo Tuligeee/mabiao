@@ -1355,7 +1355,10 @@ body[data-scanning="1"] { overflow: hidden; }
   border: 1px dashed var(--line-strong); overflow: hidden;
 }
 .pic__thumb[data-has="true"] { border-style: solid; border-color: var(--line); }
-.pic__img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+.pic__img {
+  inline-size: 100%; block-size: 100%; object-fit: contain;
+  background: var(--hover); display: block;
+}
 .pic__badge {
   position: absolute; inset-inline-end: 2px; inset-block-end: 2px;
   min-inline-size: 16px; block-size: 16px; padding-inline: 3px; border-radius: 8px;
@@ -1375,10 +1378,17 @@ body[data-scanning="1"] { overflow: hidden; }
 .vw__box {
   position: relative; padding: 12px; background: #fff; border-radius: var(--radius-lg);
   inline-size: min(1200px, calc(100vw - 48px)); block-size: min(858px, calc(100vh - 48px));
-  display: grid; place-items: center;
 }
-.vw__stage { inline-size: 100%; block-size: 100%; display: grid; place-items: center; overflow: hidden; }
-.vw__img { max-inline-size: 100%; max-block-size: 100%; display: block; }
+/* 图片区绝对铺满窗口：用 grid 撑高会让 img 按原始尺寸溢出，看起来像被裁掉 */
+.vw__stage {
+  position: absolute; inset: 12px; z-index: 1;
+  display: grid; place-items: center; overflow: hidden;
+}
+.vw__img {
+  max-inline-size: 100%; max-block-size: 100%;
+  inline-size: auto; block-size: auto; object-fit: contain; display: block;
+}
+.vw__nav, .vw__close, .vw__count, .vw__dl { z-index: 2; }
 .vw__count {
   position: absolute; inset-block-end: 14px; inset-inline-start: 50%; transform: translateX(-50%);
   padding: 4px 14px; border-radius: 999px; background: rgba(0,0,0,.06);
@@ -1396,11 +1406,16 @@ body[data-scanning="1"] { overflow: hidden; }
   inline-size: 36px; block-size: 36px; border-radius: 50%;
   border: 1px solid var(--line); background: #fff; font-size: 20px; cursor: pointer;
 }
-.vw__dl { position: absolute; inset-block-end: 14px; inset-inline-end: 16px; font-size: 13px; color: var(--ink-2); }
+.vw__dl {
+  position: absolute; inset-block-end: 14px; inset-inline-end: 16px;
+  padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.92);
+  border: 1px solid var(--line); font-size: 13px; color: var(--ink-1); text-decoration: none;
+}
 
 @media (max-width: 47.99em) {
   .vw { background: #000; }
   .vw__box { inline-size: 100vw; block-size: 100vh; padding: 0; border-radius: 0; background: #000; }
+  .vw__stage { inset: 0; }
   .vw__img { max-inline-size: 100vw; max-block-size: 100vh; }
   .vw__close { color: #fff; background: rgba(255,255,255,.12); border-color: transparent; }
   .vw__count { inset-block-end: 84px; background: rgba(255,255,255,.12); color: #fff; }
