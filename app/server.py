@@ -811,6 +811,22 @@ def comm_owner_set(c, comm_id: str, unit_id: int, shop_id: str, day: str):
               "VALUES(?,?,?,?,NULL)", (comm_id, unit_id, shop_id, eff))
 
 
+def comm_owner_move(c, comm_id: str, unit_id: int, shop_id: str, day: str):
+    """从 day 起把卡头改归 unit_id：别的机台当天封口，这台机当天开张。
+
+    合并 / 拆分改的是「这块表归哪台机」，属于配置，当天生效；
+    物理换机台才走 comm_owner_set 的次日生效，避免一天的数据被两台机各算一次。
+    """
+    c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND unit_id<>? "
+              "AND (to_day IS NULL OR to_day>?)", (day, comm_id, unit_id, day))
+    cur = c.execute("SELECT 1 FROM comm_owner WHERE comm_id=? AND unit_id=? "
+                    "AND from_day<=? AND (to_day IS NULL OR to_day>?) LIMIT 1",
+                    (comm_id, unit_id, day, day)).fetchone()
+    if not cur:
+        c.execute("INSERT OR REPLACE INTO comm_owner(comm_id,unit_id,shop_id,from_day,to_day) "
+                  "VALUES(?,?,?,?,NULL)", (comm_id, unit_id, shop_id, day))
+
+
 def comms_on(unit_id: int, day: str) -> list:
     """this unit 在 day 这天挂哪些卡头（历史归属口径）。"""
     with conn() as c:
@@ -3022,6 +3038,8 @@ def merge_units(shop_id: str, ids: list, name: str = "", lock: bool = True) -> d
                   (new_name, 1 if lock else 0, keep["id"]))
         for cid in comms:
             c.execute("UPDATE comms SET unit_id=? WHERE comm_id=?", (keep["id"], cid))
+            # 归属历史跟着改，否则核对页还按旧机台把几个卡头算成一台（2026-11-26）
+            comm_owner_move(c, cid, keep["id"], shop_id, date.today().isoformat())
         # 历史读数迁到保留的那台（同一天已有时跳过）
         for u in units[1:]:
             for r in c.execute("SELECT day,in_r,out_r,note FROM readings WHERE unit_id=?",
@@ -3135,12 +3153,16 @@ def split_unit(uid: int) -> dict:
         c.execute("UPDATE units SET name=?, shared=0, locked=0 WHERE id=?", (first, uid))
         for cid in comms[1:]:
             label = unique_unit_name(c, shop_id, base)
-            c.execute("INSERT INTO units(shop_id,name,team,shared,active) VALUES(?,?,?,0,1) "
-                      "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, shared=0",
-                      (u["shop_id"], label, u["team"]))
+            c.execute("INSERT INTO units(shop_id,name,team,shared,active,kind,brand) "
+                      "VALUES(?,?,?,0,1,?,?) "
+                      "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, shared=0, "
+                      "kind=excluded.kind, brand=excluded.brand",
+                      (shop_id, label, u["team"], u["kind"], u["brand"]))
             nid = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
                             (u["shop_id"], label)).fetchone()["id"]
             c.execute("UPDATE comms SET unit_id=? WHERE comm_id=?", (nid, cid))
+            # 拆出去的卡头归属也要跟着走，否则核对页仍按原机台合并显示（2026-11-26）
+            comm_owner_move(c, cid, nid, shop_id, date.today().isoformat())
     return {"ok": True, "units": len(comms)}
 
 

@@ -307,6 +307,40 @@ def t_unit_retired_today_hidden():
     assert "巳弹珠机-001" in names2, "历史日期仍要留着"
 
 
+def t_split_owner():
+    """拆分后归属跟着走：当天核对就按卡头分开，不再合成一台。"""
+    sid = mk_shop("测试店-拆分归属")
+    uid = mk_unit(sid, "午弹珠机-001", brand="午")
+    attach_comm(sid, uid, "4001")
+    attach_comm(sid, uid, "4002")
+    with S.conn() as c:
+        c.execute("UPDATE units SET shared=1 WHERE id=?", (uid,))
+    today = S.date.today().isoformat()
+
+    before = [r for r in S.recon(sid, today, "pachinko")["rows"] if r["name"].startswith("午弹珠机")]
+    eq(len(before), 1, "拆之前是一台")
+    eq(before[0]["comm_count"], 2, "两个卡头")
+
+    S.split_unit(uid)
+    after = [r for r in S.recon(sid, today, "pachinko")["rows"] if r["name"].startswith("午弹珠机")]
+    eq(len(after), 2, "拆完两台")
+    eq(sorted(r["comm_count"] for r in after), [1, 1], "一台一个卡头")
+
+
+def t_merge_owner():
+    """合并后归属跟着走：两个卡头并成一台，当天核对就一行。"""
+    sid = mk_shop("测试店-合并归属")
+    a = mk_unit(sid, "未弹珠机-001", brand="未")
+    b = mk_unit(sid, "未弹珠机-002", brand="未")
+    attach_comm(sid, a, "4101")
+    attach_comm(sid, b, "4102")
+    S.merge_units(sid, [a, b])
+    today = S.date.today().isoformat()
+    rows = [r for r in S.recon(sid, today, "pachinko")["rows"] if r["name"].startswith("未弹珠机")]
+    eq(len(rows), 1, "合并后一台")
+    eq(rows[0]["comm_count"], 2, "两个卡头")
+
+
 # ================================================================= 五、弹珠机玩法
 def t_four_fields_win():
     sid = mk_shop("测试店-四字段")
@@ -628,6 +662,8 @@ CASES = [
     ("机台上机日之前不出现", t_unit_from_day),
     ("停用当天在、次日起不在", t_unit_retire),
     ("停用当天没填数就不占位", t_unit_retired_today_hidden),
+    ("拆分后核对按卡头分开", t_split_owner),
+    ("合并后核对并成一台", t_merge_owner),
     ("四字段玩法算中奖出珠", t_four_fields_win),
     ("三字段玩法不算中奖出珠", t_three_fields_no_win),
     ("改一币几珠不影响历史", t_snapshot_per_coin),
