@@ -1521,12 +1521,15 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
                  "expired": bool(r["expired"])})
         mach = {r["id"]: dict(r) for r in c.execute("SELECT * FROM machines")}
     rows = []
+    seen_shared = set()
     for u in units:
         m = mach.get(u.get("machine_id")) or {}
-        if m.get("shared") and (u.get("pos") or 1) != 1:
-            continue
         if m.get("shared"):
+            if m["id"] in seen_shared:
+                continue
+            seen_shared.add(m["id"])
             u = dict(u)
+            u["name"] = m["name"]
             u["comms"] = [{"comm_id": x} for x in machine_comms(m["id"], day)]
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day)
