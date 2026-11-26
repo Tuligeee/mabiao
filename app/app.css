@@ -1622,8 +1622,6 @@ body[data-scanning="1"] { overflow: hidden; }
 }
 .machine[data-editing="true"] .machine__foot,
 .machine[data-editing="true"] .machine__comms { grid-area: auto; }
-.machine[data-editing="true"] .mf__row,
-.machine[data-editing="true"] .mf__acts { max-inline-size: 52rem; }
 /* 编辑时品牌下拉不被列表容器的 overflow:hidden 裁掉 */
 .machines:has(.machine[data-editing="true"]) { overflow: visible; }
 .mf__row .pick--block { min-inline-size: 0; }
