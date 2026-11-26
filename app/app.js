@@ -2842,7 +2842,9 @@ async function boot() {
   }
 
   // 刷新回原页：地址栏里的 #view 优先，其次是扫码进来的填写页
-  const startView = (S.pendingUnit ? 'entry' : null) || viewFromHash() || 'home';
+  let startView = (S.pendingUnit ? 'entry' : null) || viewFromHash() || 'home';
+  // 手机上不提供设置页：地址栏带着 #settings 也直接回首页
+  if (startView === 'settings' && isPhone()) startView = 'home';
   initHistory(startView);
   if (S.pendingUnit) {
     setView('entry', { silent: true });
