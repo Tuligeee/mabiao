@@ -1196,6 +1196,8 @@ body[data-scanning="1"] { overflow: hidden; }
   .nav { grid-area: nav; overflow-x: auto; scrollbar-width: none; }
   .nav::-webkit-scrollbar { display: none; }
   .nav__item { white-space: nowrap; }
+  /* 手机上没有设置页：机台/门店维护只在电脑上做 */
+  .nav__item[data-view="settings"] { display: none; }
 
   /* 门店选择器：只留短名 */
   .pick--sm .pick__val { max-inline-size: 5.5rem; }

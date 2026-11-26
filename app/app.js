@@ -146,8 +146,14 @@ function syncDayLock() {
   wrap.hidden = !show;
 }
 
+/* 手机（竖屏/窄屏）：不提供设置页，页头也不放门店选择器 */
+const PHONE_MQ = window.matchMedia('(max-width: 47.99em)');
+function isPhone() { return PHONE_MQ.matches; }
+
 function setView(v, opts) {
   opts = opts || {};
+  // 手机上不提供设置页：机台/门店维护只在电脑上做
+  if (v === 'settings' && isPhone()) v = 'home';
   S.view = v;
   syncDayLock();
   ['home', 'entry', 'recon', 'overview', 'settings', 'scan'].forEach((k) => {
@@ -467,7 +473,9 @@ async function loadEntry() {
 
   if (!S.allRows.length) {
     renderEntry();
-    $('entryLede').textContent = '这家店没有参与核对的机台，去设置里加';
+    $('entryLede').textContent = isPhone()
+      ? '这家店还没有机台，让总部在电脑上把机台加进来'
+      : '这家店没有参与核对的机台，去设置里加';
     return;
   }
   const bits = [S.kind === 'pachinko' ? '弹珠机' : '推币机', S.entry.length + ' 台'];
@@ -2819,7 +2827,7 @@ async function boot() {
       setTimeout(() => clearInterval(poll), 120000);
     }
   } catch (e) { /* 忽略 */ }
-  if (!b.units_confirmed) welcomeDialog(b);
+  if (!b.units_confirmed && !isPhone()) welcomeDialog(b);
 
   if (scanHit) {
     if (S.role === 'hq' && scanHit.shop && scanHit.shop.id) {
@@ -2979,6 +2987,8 @@ function applyRole() {
   $('tools').hidden = false;
   const navOv = document.querySelector('.nav__item[data-view="overview"]');
   if (navOv) navOv.hidden = store;   // 门店看不到全链
+  const shopPick = $('shopPick');
+  if (shopPick) shopPick.hidden = store;   // 门店只有一家店，不用选
   $('shopBtn').disabled = store;
   $('shopBtn').setAttribute('aria-label', store ? '当前门店' : '选择门店');
   if (store && S.view === 'overview') setView('entry');
