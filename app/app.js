@@ -797,8 +797,17 @@ function photoBox(row, shopId, day, poi) {
   img.hidden = true;
   const badge = el('span', 'pic__badge');
 
-  const btn = el('button', 'btn btn--quiet pic__btn', row.photos.length ? '加一张' : '拍照');
+  const CAM_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M3 8.5h3.2L8 6h8l1.8 2.5H21V19H3z"/><circle cx="12" cy="13.2" r="3.4"/></svg>';
+  const btn = el('button', 'btn btn--quiet pic__btn');
   btn.type = 'button';
+  const ico = el('span', 'pic__btn-ico');
+  ico.innerHTML = CAM_SVG;
+  const lbl = el('span', 'pic__btn-t', row.photos.length ? '加一张' : '拍照');
+  btn.appendChild(ico);
+  btn.appendChild(lbl);
+  const setLabel = (t) => { lbl.textContent = t; };
 
   const file = document.createElement('input');
   file.type = 'file';
@@ -812,11 +821,11 @@ function photoBox(row, shopId, day, poi) {
     if (!last) {
       img.hidden = true;
       badge.hidden = true;
-      btn.textContent = '拍照';
+      setLabel('拍照');
       return;
     }
     thumb.dataset.has = 'true';
-    btn.textContent = '加一张';
+    setLabel('加一张');
     badge.hidden = live.length < 2;
     badge.textContent = String(live.length);
     loadPhoto(last.id).then((u) => { if (u) { img.src = u; img.hidden = false; } }).catch(() => {});
@@ -837,8 +846,8 @@ function photoBox(row, shopId, day, poi) {
     file.value = '';
     if (!f) return;
     btn.disabled = true;
-    const old = btn.textContent;
-    btn.textContent = '上传中';
+    const old = lbl.textContent;
+    setLabel('上传中');
     try {
       await uploadPhoto(shopId, day, row, f, poi);
       paint();
@@ -846,7 +855,7 @@ function photoBox(row, shopId, day, poi) {
       toast('照片已存');
     } catch (e) {
       toast(String(e.message || e), 'bad');
-      btn.textContent = old;
+      setLabel(old);
     } finally {
       btn.disabled = false;
     }

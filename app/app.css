@@ -1364,7 +1364,15 @@ body[data-scanning="1"] { overflow: hidden; }
   min-inline-size: 16px; block-size: 16px; padding-inline: 3px; border-radius: 8px;
   background: rgba(0,0,0,.65); color: #fff; font-size: 10px; line-height: 16px; text-align: center;
 }
-.pic__btn { font-size: var(--text-xs); block-size: 32px; padding-inline: var(--space-3); }
+.pic__btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm); block-size: 40px; padding-inline: 14px;
+}
+.pic__btn-ico { display: inline-flex; }
+.pic__btn-ico svg { inline-size: 18px; block-size: 18px; }
+@media (max-width: 47.99em) {
+  .pic__btn { block-size: 44px; font-size: var(--text-base); padding-inline: var(--space-4); }
+}
 
 .pic-chip {
   margin-inline-start: var(--space-2); padding: 1px 6px; border-radius: 999px;
@@ -1442,5 +1450,6 @@ body[data-scanning="1"] { overflow: hidden; }
     padding: 10px 22px; border-radius: 999px; background: #fff; color: #111;
   }
 }
+
 
 
