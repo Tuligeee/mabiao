@@ -767,7 +767,10 @@ async function loadPhoto(id) {
   const r = await fetch(BASE + 'api/photo?id=' + encodeURIComponent(id),
     { headers: tok ? { Authorization: 'Bearer ' + tok } : {} });
   if (!r.ok) return null;
-  const url = URL.createObjectURL(await r.blob());
+  const blob = await r.blob();
+  S.photoBlobs = S.photoBlobs || {};
+  S.photoBlobs[id] = blob;
+  const url = URL.createObjectURL(blob);
   S.photoUrls[id] = url;
   return url;
 }
@@ -887,10 +890,40 @@ function openViewer(list, start, title) {
   const next = el('button', 'vw__nav vw__nav--next', '›');
   const close = el('button', 'vw__close', '×');
   close.setAttribute('aria-label', '关闭');
-  const dl = el('a', 'vw__dl', '保存到相册');
-  dl.download = (title || 'meter') + '.jpg';
+  const dl = el('button', 'vw__dl', '保存到相册');
+  dl.type = 'button';
 
   prev.type = 'button'; next.type = 'button';
+
+  // iOS Safari 不认 <a download>，会变成「下载到文件」；有分享能力就走系统分享面板
+  // （里面才有「存储图像」＝存进相册），没有才退回下载。
+  const saveCurrent = async () => {
+    const it = items[idx];
+    const base = (title || 'meter') + '_' + String(it.at || '').replace(/[^\d]/g, '').slice(0, 12);
+    const name = base + '.jpg';
+    // 大图已经加载过，blob 就在缓存里：先走同步分享，iOS 才不会把手势判失效
+    let blob = S.photoBlobs && S.photoBlobs[it.id];
+    const tryShare = () => {
+      if (!blob || !navigator.canShare) return false;
+      const file = new File([blob], name, { type: 'image/jpeg' });
+      if (!navigator.canShare({ files: [file] })) return false;
+      navigator.share({ files: [file], title: name }).catch(() => {});
+      return true;
+    };
+    if (tryShare()) return;
+    const u = await loadPhoto(it.id).catch(() => null);
+    blob = S.photoBlobs && S.photoBlobs[it.id];
+    if (tryShare()) return;
+    if (!u) { toast('照片没取到'); return; }
+    const a = document.createElement('a');
+    a.href = u;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast('浏览器不支持直接存相册，已下载到文件；长按图片也能存');
+  };
+  dl.addEventListener('click', (e) => { e.stopPropagation(); saveCurrent(); });
 
   const show = async (n) => {
     idx = n;
@@ -901,7 +934,7 @@ function openViewer(list, start, title) {
     stage.dataset.loading = 'true';
     const u = await loadPhoto(items[n].id).catch(() => null);
     stage.dataset.loading = 'false';
-    if (u) { img.src = u; dl.href = u; }
+    if (u) img.src = u;
   };
   prev.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) show(idx - 1); });
   next.addEventListener('click', (e) => { e.stopPropagation(); if (idx < items.length - 1) show(idx + 1); });

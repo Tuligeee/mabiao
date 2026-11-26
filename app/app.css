@@ -1419,7 +1419,8 @@ body[data-scanning="1"] { overflow: hidden; }
 .vw__dl {
   position: absolute; inset-block-end: 14px; inset-inline-end: 16px;
   padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.92);
-  border: 1px solid var(--line); font-size: 13px; color: var(--ink-1); text-decoration: none;
+  border: 1px solid var(--line); font: inherit; font-size: 13px;
+  color: var(--ink-1); text-decoration: none; cursor: pointer;
 }
 
 @media (max-width: 47.99em) {
@@ -1450,6 +1451,7 @@ body[data-scanning="1"] { overflow: hidden; }
     padding: 10px 22px; border-radius: 999px; background: #fff; color: #111;
   }
 }
+
 
 
 
