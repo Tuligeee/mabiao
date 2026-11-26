@@ -1628,6 +1628,11 @@ body[data-scanning="1"] { overflow: hidden; }
 .machines:has(.machine[data-editing="true"]) { overflow: visible; }
 .mf__row .pick--block { min-inline-size: 0; }
 
+/* 卡头占满一行、跟着名称走；按钮居中收尾 */
+.machine[data-editing="true"] .mf__row--top { align-items: center; }
+.machine[data-editing="true"] .mf__chips { flex: 1; min-inline-size: 0; }
+.machine[data-editing="true"] .mf__acts { justify-content: center; }
+
 /* 设置页顶部动作区：二维码 + 从宝点同步 同一行，提示语收成一行 */
 .setup-acts { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .setup-acts .setup-hint { font-size: var(--text-sm); color: var(--ink-3); margin: 0; }
