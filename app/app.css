@@ -1199,6 +1199,24 @@ body[data-scanning="1"] { overflow: hidden; }
   .nav { grid-area: nav; overflow-x: auto; scrollbar-width: none; }
   .nav::-webkit-scrollbar { display: none; }
   .nav__item { white-space: nowrap; }
+  /* 手机：页面选择器做成分段控件——灰底托着，当前页是白色药丸，一眼看出能点、现在在哪 */
+  .nav {
+    gap: 2px; padding: 3px;
+    background: var(--surface-2, #f1f2f4);
+    border-radius: var(--radius-lg);
+  }
+  .nav__item {
+    flex: 1 1 0; justify-content: center;
+    block-size: 38px; padding-inline: var(--space-2);
+    border-radius: calc(var(--radius-lg) - 3px);
+    font-size: var(--text-base); font-weight: var(--weight-medium);
+    color: var(--ink-2);
+  }
+  .nav__item[aria-current="page"] {
+    background: var(--card, #fff); color: var(--ink);
+    font-weight: var(--weight-semibold);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .14);
+  }
   /* 手机上没有设置页：机台/门店维护只在电脑上做 */
   .nav__item[data-view="settings"] { display: none; }
 
