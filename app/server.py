@@ -883,12 +883,18 @@ def machine_units(machine_id: int) -> list:
 def machine_comms(machine_id: int, day: str | None = None) -> list:
     """机台下的全部卡头（按 P 位排）；给 day 就是那天归属的。"""
     out, seen = [], set()
-    for u in machine_units(machine_id):
-        cs = comms_on(u["id"], day) if day else [str(x["comm_id"]) for x in u["comms"]]
-        for cid in cs:
-            if cid not in seen:
-                seen.add(cid)
-                out.append(cid)
+    units = machine_units(machine_id)
+    with conn() as c:
+        for u in units:
+            if day:
+                cs = comms_on(u["id"], day)
+            else:
+                cs = [str(r["comm_id"]) for r in c.execute(
+                    "SELECT comm_id FROM comms WHERE unit_id=? ORDER BY comm_id", (u["id"],))]
+            for cid in cs:
+                if cid not in seen:
+                    seen.add(cid)
+                    out.append(cid)
     return out
 
 
