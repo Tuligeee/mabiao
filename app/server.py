@@ -860,18 +860,26 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
     import jingjian
     d = shop_row(shop_id) or {}
     base = d.get("jj_base") or jingjian.DEFAULT_BASE
-    rows = jingjian.day_summary(base, (d.get("jj_shop_id") or "").strip(), day,
-                                (d.get("jj_chain_id") or "").strip())
+    # 按 P 位取：一台机多个 P 就是多条，第 2 个起名字带 (2)(3)，和拆开码表的命名一致
+    rows = jingjian.day_consoles(base, (d.get("jj_shop_id") or "").strip(), day,
+                                 (d.get("jj_chain_id") or "").strip())
     ts = now()
+    # 同一个 P 号可能有好几个出币口（鲸舰里 2P 重复出现），所以按顺序编号，别拿 P 号当唯一键
+    seq: dict = {}
+    for r in sorted(rows, key=lambda x: (x["machine"], x.get("pos") or 1, str(x.get("console_id") or ""))):
+        i = seq.get(r["machine"], 0) + 1
+        seq[r["machine"]] = i
+        r["seq"] = i
     with conn() as c:
         c.execute("DELETE FROM machine_daily WHERE shop_id=? AND day=?", (shop_id, day))
         for r in rows:
             if not r["machine"]:
                 continue
+            name = r["machine"] if r["seq"] <= 1 else "%s (%d)" % (r["machine"], r["seq"])
             c.execute("INSERT OR REPLACE INTO machine_daily"
                       "(shop_id,day,machine_name,coins,play_count,raw,fetched_at) "
                       "VALUES(?,?,?,?,?,?,?)",
-                      (shop_id, day, r["machine"], r["coins"], r["count"],
+                      (shop_id, day, name, r["coins"], r["count"],
                        json.dumps(r, ensure_ascii=False), ts))
     return {"ok": True, "provider": "jingjian", "machines": len(rows)}
 
@@ -1133,7 +1141,11 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
             ph[r["unit_id"]] = {"n": r["n"], "expired": bool(r["ex"])}
 
     rows = []
+    today = date.today().isoformat()
     for u in units:
+        # 已停用的机台：当天没填过数就不再占核对页一格（停用当天填过的留最后一天）
+        if not u["active"] and not reads.get(u["id"]) and day >= today:
+            continue
         # 用「当天归属」的卡头，卡头换过机台也不改写历史
         hist = comms_on(u["id"], day)
         comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
@@ -2001,10 +2013,10 @@ def _poss_one(cno: dict, comms_sorted) -> list:
     return vals
 
 def pcomms_of(all_comms) -> list:
-    """把通讯ID列表变成 [{p: 'P3'|'', comm}]，P 位取 comms.console_no（墙上实际位置）。
+    """把通讯ID列表变成 [{p: 'P1'..'Pn', comm}]。
 
-    没标的留空串，界面显示「未标」—— 以前按顺序硬编 P1..Pn，
-    设置页显示 P3=758516，核对页却是 P1，两处对不上（2026-11-26 修）。
+    系统里填的位置（console_no）只用来排序，显示一律按顺序 P1..Pn：
+    后台数据常年不改，出现三个 2P、或者一个都没标，直接照抄会乱（2026-11-26 用户口径）。
     """
     ids = [str(c) for c in (all_comms or [])]
     if not ids:
@@ -2013,13 +2025,8 @@ def pcomms_of(all_comms) -> list:
         rows = c.execute("SELECT comm_id, console_no FROM comms WHERE comm_id IN (%s)"
                          % ",".join("?" * len(ids)), ids).fetchall()
     pos = {str(r["comm_id"]): (r["console_no"] or "") for r in rows}
-    def _p(cid):
-        v = pos.get(cid, "")
-        return v or ("P1" if len(ids) == 1 else "")
-
-    items = [{"p": _p(cid), "comm": cid} for cid in ids]
-    items.sort(key=lambda x: (x["p"] or "~", x["comm"]))
-    return items
+    ordered = sorted(ids, key=lambda cid: (pos.get(cid) or "~", cid))
+    return [{"p": "P%d" % (i + 1), "comm": cid} for i, cid in enumerate(ordered)]
 
 
 def _machine_groups(shop_id: str) -> list:

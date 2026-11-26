@@ -217,6 +217,43 @@ def machine_consoles(base: str, shop_id, day_from: str, day_to: str, chain_id: s
     return out
 
 
+def day_consoles(base: str, shop_id, day: str, chain_id: str = "") -> list:
+    """按 P 位取一天的机台汇总 → [{machine, pos, console_id, coins, count, out_coins, winning}]。
+
+    鲸舰的「机台消费汇总」有两种口径：按机台 / 按 P 位。
+    码表是按 P 位核对的，所以这里走 P 位接口。
+    """
+    tok = token(base, shop_id, chain_id)
+    body = {"startDate": day, "endDate": day, "KindIdStr": "", "isCalculate": True}
+    path = "/device/manager/machineplaylog/getconsolesummarylist"
+    try:
+        r = _request(base, "POST", path, body, token=tok)
+        if not r.get("success"):
+            raise JingjianError("鲸舰P位汇总失败: %r" % (r.get("msg"),))
+    except JingjianError as exc:
+        if "401" not in str(exc) or not chain_id:
+            raise
+        tok = login_shop(shop_id, chain_id, base)
+        r = _request(base, "POST", path, body, token=tok)
+    out = []
+    for x in (r.get("data") or []):
+        mach = str(x.get("machineName") or "").strip()
+        if not mach:
+            continue
+        digits = "".join(ch for ch in str(x.get("consoleNo") or "") if ch.isdigit())
+        out.append({
+            "machine": mach,
+            "pos": int(digits) if digits else 1,
+            "console_id": x.get("consoleId"),
+            "coins": float(x.get("inTotalAmount") or 0),
+            "count": float(x.get("inTotalCount") or 0),
+            "out_coins": float(x.get("outNativeCoin1TotalAmount") or 0),
+            "winning": float(x.get("winningCoins") or 0),
+        })
+    out.sort(key=lambda r: (r["machine"], r["pos"]))
+    return out
+
+
 def day_summary(base: str, shop_id, day: str, chain_id: str = "") -> list:
     """一天一店的机台汇总 → [{machine, coins, count}]。"""
     tok = token(base, shop_id, chain_id)

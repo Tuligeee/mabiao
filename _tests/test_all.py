@@ -19,7 +19,8 @@ APP = os.environ.get("METER_APP") or str(Path(__file__).resolve().parent.parent 
 sys.path.insert(0, APP)
 
 VERBOSE = "-v" in sys.argv
-TMP = tempfile.mkdtemp(prefix="meter_test_")
+TMP = os.environ.get("METER_TEST_TMP") or tempfile.mkdtemp(prefix="meter_test_")
+os.makedirs(TMP, exist_ok=True)
 
 import server as S                                    # noqa: E402
 
@@ -291,6 +292,19 @@ def t_unit_retire():
     assert "卯弹珠机-001" in days, "停用当天还要在"
     days2 = [r["name"] for r in S.recon(sid, "2026-05-21", "pachinko")["rows"]]
     assert "卯弹珠机-001" not in days2, "次日起不在"
+
+
+def t_unit_retired_today_hidden():
+    """停用当天还没填数：核对页不再占位；历史日期照旧。"""
+    sid = mk_shop("测试店-停用当天")
+    uid = mk_unit(sid, "巳弹珠机-001", brand="巳")
+    today = S.date.today().isoformat()
+    S.retire_unit(uid, today)
+    names = [r["name"] for r in S.recon(sid, today, "pachinko")["rows"]]
+    assert "巳弹珠机-001" not in names, "停用当天没填数，核对页不该再占位"
+    prev = (S.date.fromisoformat(today) - S.timedelta(days=1)).isoformat()
+    names2 = [r["name"] for r in S.recon(sid, prev, "pachinko")["rows"]]
+    assert "巳弹珠机-001" in names2, "历史日期仍要留着"
 
 
 # ================================================================= 五、弹珠机玩法
@@ -613,6 +627,7 @@ CASES = [
     ("归零当天按读数本身算", t_reset),
     ("机台上机日之前不出现", t_unit_from_day),
     ("停用当天在、次日起不在", t_unit_retire),
+    ("停用当天没填数就不占位", t_unit_retired_today_hidden),
     ("四字段玩法算中奖出珠", t_four_fields_win),
     ("三字段玩法不算中奖出珠", t_three_fields_no_win),
     ("改一币几珠不影响历史", t_snapshot_per_coin),
