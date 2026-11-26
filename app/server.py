@@ -1339,6 +1339,10 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
         have_card = {r["comm_id"] for r in
                      c.execute("SELECT comm_id FROM card_daily WHERE shop_id=? AND day=?",
                                (shop_id, day))}
+        # 鲸舰 / 世软是机台维度：有数的是 machine_daily 里的机台名，不是卡头流水
+        have_machine = {r["machine_name"] for r in
+                        c.execute("SELECT machine_name FROM machine_daily WHERE shop_id=? AND day=?",
+                                  (shop_id, day))}
         pics = {}
         for r in c.execute("SELECT id, unit_id, at, w, h, expired FROM photos "
                            "WHERE shop_id=? AND day=? ORDER BY at", (shop_id, day)):
@@ -1358,7 +1362,9 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             "fields": brand_flags(brand_of(u))["fields"] if (u.get("kind") == "pachinko") else None,
             "unit": brand_unit(brand_of(u)) if (u.get("kind") == "pachinko") else None,
             "pos": u.get("pos"), "code": u.get("code"),
-            "comms": comms, "has_card": any(c in have_card for c in comms),
+            "comms": comms,
+            "has_card": (any(c in have_card or c in have_machine for c in comms)
+                         or (u["name"] or "").strip() in have_machine),
             "prev_in": pv["in_r"] if pv else None,
             "prev_out": pv["out_r"] if pv else None,
             "prev_day": pv["day"] if pv else None,
@@ -2120,6 +2126,7 @@ def bd_device_list(shop_id: str) -> list:
     shop = shop_of(shop_row(shop_id))
     bd = baodian(shop_id)
     out = []
+    unknown = {}
     page = 0
     while True:
         j = bd.post("/terminals/terminal/getlist",
@@ -2135,6 +2142,8 @@ def bd_device_list(shop_id: str) -> list:
             else:
                 kind = next((k for kw, k in TEAM_KIND_KW if kw in team), None)
                 if not kind:
+                    unknown.setdefault(team or "(没分组)", []).append(
+                        (x.get("deviceName") or "").strip())
                     continue
             comms = [c.strip() for c in str(x.get("commIds") or "").split(",") if c.strip()]
             # 脏数据：宝点里有 commIds 是 "0" 的（彩虹王国），不是真卡头，跳过
@@ -2148,6 +2157,7 @@ def bd_device_list(shop_id: str) -> list:
         if page >= int(j.get("totalPage") or 1) or not rows:
             break
         time.sleep(0.2)
+    bd_device_list.unknown = unknown      # 给预览用：哪些分组没认出来
     return out
 
 
@@ -2193,7 +2203,9 @@ def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
         if uc and not (uc & bd_comms):
             orphan.append({"unit_id": u["id"], "name": u["name"], "kind": u["kind"],
                            "comms": sorted(uc)})
+    unknown = getattr(bd_device_list, "unknown", {}) or {}
     return {"ok": True, "rows": rows, "orphan": orphan,
+            "unknown": [{"team": k, "machines": v} for k, v in sorted(unknown.items())],
             "pos_have": len(pos), "devices": len(devices), "days": days}
 
 

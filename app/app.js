@@ -150,6 +150,12 @@ function syncDayLock() {
 const PHONE_MQ = window.matchMedia('(max-width: 47.99em)');
 function isPhone() { return PHONE_MQ.matches; }
 
+/* 取数方式的中文名：客服用什么词，界面就用什么词 */
+function provLabel() {
+  return ({ baodian: '宝点', shiruan: '世软', jingjian: '鲸舰', manual: '纯手工' })[S.provider || 'baodian']
+    || '宝点';
+}
+
 function setView(v, opts) {
   opts = opts || {};
   // 手机上不提供设置页：机台/门店维护只在电脑上做
@@ -523,7 +529,7 @@ function renderConfirm() {
     const meta = [];
     if (r.comm_count) meta.push(r.comm_count + ' 个通讯ID');
     if (r.shared) meta.push('共用码表');
-    if (!r.has_card) meta.push('宝点无数据');
+    if (!r.has_card && (S.provider || 'baodian') !== 'manual') meta.push(provLabel() + '无数据');
     li.appendChild(el('span', 'sheet__meta', meta.join(' · ')));
     ul.appendChild(li);
   });
@@ -1771,7 +1777,24 @@ async function openBdSync(btn) {
   box.appendChild(tbl);
 
   if ((d.orphan || []).length) {
-    box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
+    const unknown = d.unknown || [];
+  if (unknown.length) {
+    const boxU = el('div');
+    boxU.style.cssText = 'margin:12px 0 4px;padding:10px 12px;border-radius:8px;'
+      + 'background:#fff8e6;border:1px solid #f0d9a8;font-size:13px;line-height:1.7';
+    boxU.appendChild(el('div', null, '这些分组没认出来，没算进同步（宝点「项目分组」里新建的子分组要告诉我一声）：'));
+    const ul = el('ul');
+    ul.style.cssText = 'margin:4px 0 0;padding-inline-start:18px';
+    unknown.forEach((u) => {
+      ul.appendChild(el('li', null, u.team + ' · ' + (u.machines || []).length
+        + ' 台（' + (u.machines || []).slice(0, 3).join('、')
+        + ((u.machines || []).length > 3 ? '…' : '') + '）'));
+    });
+    boxU.appendChild(ul);
+    box.appendChild(boxU);
+  }
+
+  box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
       + d.orphan.map((x) => x.name).join('、')));
   }
 
@@ -2747,7 +2770,9 @@ async function boot() {
 
   const conn = $('conn');
   conn.dataset.state = S.bdOk ? 'ok' : 'bad';
-  $('connText').textContent = S.bdOk ? '宝点已连接' : '宝点未连接';
+  $('connText').textContent = (S.provider || 'baodian') === 'baodian'
+    ? (S.bdOk ? '宝点已连接' : '宝点未连接')
+    : provLabel() + '取数';
 
   const shop = S.shops.find((s) => s.id === S.shopId);
   shopPicker = UI.picker({
@@ -2850,6 +2875,17 @@ async function boot() {
 async function refreshBdState() {
   const btn = $('conn');
   if (!btn) return;
+  // 宝点店才有扫码登录；世软/鲸舰/纯手工由后台配置，不显示宝点状态，免得误报
+  const prov = S.provider || 'baodian';
+  if (prov !== 'baodian') {
+    btn.dataset.state = 'ok';
+    btn.disabled = true;
+    $('connText').textContent = provLabel() + '取数';
+    btn.title = '这家店的取数走' + provLabel();
+    btn.setAttribute('aria-label', '这家店的取数走' + provLabel());
+    return;
+  }
+  btn.disabled = false;
   try {
     const st = await api('/api/bd/status?shop_id=' + encodeURIComponent(S.shopId || ''));
     const ok = !!st.alive;
