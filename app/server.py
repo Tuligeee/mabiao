@@ -898,7 +898,7 @@ def fetch_jingjian_day(shop_id: str, day: str) -> dict:
         for r in rows:
             if not r["machine"]:
                 continue
-            name = r["machine"] if r["seq"] <= 1 else "%s (%d)" % (r["machine"], r["seq"])
+            name = r["machine"] if r["seq"] <= 1 else "%s P%d" % (r["machine"], r["seq"])
             c.execute("INSERT OR REPLACE INTO machine_daily"
                       "(shop_id,day,machine_name,coins,play_count,raw,fetched_at) "
                       "VALUES(?,?,?,?,?,?,?)",
@@ -2065,7 +2065,7 @@ def _machine_groups(shop_id: str) -> list:
             comms.setdefault(r["unit_id"], []).append(str(r["comm_id"]))
     groups: dict[tuple, list] = {}
     for u in units:
-        base = re.sub(r"\s*\(\d+\)\s*$", "", re.sub(r"\s+\d{5,}$", "", u["name"])).strip() or u["name"]
+        base = re.sub(r"\s*\(\d+\)\s*$", "", re.sub(r"\s+P\d+$", "", re.sub(r"\s+\d{5,}$", "", u["name"]))).strip() or u["name"]
         u["comms"] = comms.get(u["id"], [])
         groups.setdefault((u["kind"] or "pusher", base), []).append(u)
     out = []
@@ -2296,7 +2296,8 @@ def bd_sync_apply(shop_id: str, items: list) -> dict:
             # 拆开的几块仍归同一台机：第一块用原名，其余自动加 (2)(3)(4)，
             # 这样设置页还是一行一台机、显示 N 个卡头，只是不再是「共用码表」
             with conn() as c:
-                sub = unique_unit_name(c, shop_id, name, skip_id=(uid if i == 0 else None))
+                raw_name = name if i == 0 else "%s P%d" % (name, i + 1)
+                sub = unique_unit_name(c, shop_id, raw_name, skip_id=(uid if i == 0 else None))
             res = save_unit({"shop_id": shop_id, "id": (uid if i == 0 else None),
                              "name": sub, "kind": kind, "comms": [cid], "shared": False})
             targets.add(res["id"])
