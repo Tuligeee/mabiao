@@ -1,0 +1,13 @@
+[Unit]
+Description=Meter Baodian session refresh (re-login when <1h left)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory={dir}
+Environment=PYTHONUNBUFFERED=1
+Environment=BD_SESSION_FILE=/opt/taocan/.cache/session.json
+ExecStart={venv} {dir}/bin/bd_refresh.py
+StandardOutput=append:{dir}/logs/bd_refresh.log
+StandardError=append:{dir}/logs/bd_refresh.err.log

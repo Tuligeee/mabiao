@@ -1,0 +1,12 @@
+[Unit]
+Description=Every 30 min: refresh Baodian session when <1h left
+
+[Timer]
+# 开机 5 分钟后先跑一次，之后每 30 分钟一次
+OnBootSec=5min
+OnUnitActiveSec=30min
+AccuracySec=1min
+Unit=bd-refresh.service
+
+[Install]
+WantedBy=timers.target

@@ -388,6 +388,8 @@ def bd_alive(shop_id: str = "") -> dict:
 BD_AUTO_LOGIN = os.environ.get("METER_BD_AUTO", "1") == "1"
 BD_VENV_PY = os.environ.get("METER_BD_VENV_PY") or "/opt/日报自动化_服务器部署包/.venv/bin/python"
 BD_LOGIN_PY = os.path.join(str(BASE), "baodian_login.py")
+# 统一入口：定时器用的同一个脚本（同一套阈值 + 同一把锁），没有就退回老的 --ensure
+BD_REFRESH_PY = os.environ.get("METER_BD_REFRESH_PY") or os.path.join(str(BASE), "bin", "bd_refresh.py")
 _BD_AUTO_TS = [0.0]
 
 
@@ -395,6 +397,8 @@ def bd_auto_login(force: bool = False) -> dict:
     """登录态过期就用账密自动重登（走日报 venv 的 python，那边有 ddddocr）。
 
     成功会重写 /opt/taocan/.cache/session.json，所有工具一起受益。
+    有 bin/bd_refresh.py 就走它——跟 30 分钟一次的定时器同一套阈值和同一把锁，
+    避免两边同时过验证码。
     """
     if not BD_AUTO_LOGIN:
         return {"ok": False, "skipped": "自动登录已关闭"}
@@ -405,16 +409,20 @@ def bd_auto_login(force: bool = False) -> dict:
         return {"ok": False, "skipped": "刚试过，等一会儿"}
     _BD_AUTO_TS[0] = now
     import subprocess
+    cmd = ([BD_VENV_PY, BD_REFRESH_PY, "--if-needed"]
+           if os.path.exists(BD_REFRESH_PY) else [BD_VENV_PY, BD_LOGIN_PY, "--ensure"])
     try:
-        pr = subprocess.run([BD_VENV_PY, BD_LOGIN_PY, "--ensure"],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, timeout=180)
+        pr = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, timeout=300)
         out = pr.stdout.decode("utf-8", "replace").strip().splitlines()
         data = {}
         for line in reversed(out):
             line = line.strip()
             if line.startswith("{"):
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    continue
                 break
         if pr.returncode != 0:
             return {"ok": False, "error": (data.get("error") or "登录失败")[:200]}

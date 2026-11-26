@@ -36,6 +36,7 @@ TARGETS = {
         "public": "https://mancado.cn/cwsj/meter",
         "seed_from_prod": False,
         "cert_watch": True,
+        "bd_refresh": True,
     },
     "stg": {
         "dir": "/opt/meter-stg",
@@ -44,8 +45,12 @@ TARGETS = {
         "public": "https://mancado.cn/cwsj/meter-stg",
         "seed_from_prod": True,
         "cert_watch": False,
+        "bd_refresh": False,
     },
 }
+
+# 宝点登录要过验证码，得用日报那个装了 ddddocr 的 venv
+BD_VENV = "/opt/日报自动化_服务器部署包/.venv/bin/python"
 
 # 只传这些，数据库不在里面
 FILES = [
@@ -55,7 +60,10 @@ FILES = [
 ]
 
 # 不在 app 目录里的：本地相对路径 -> 远端相对路径
-EXTRA = [("deploy/cert_watch.py", "bin/cert_watch.py")]
+EXTRA = [
+    ("deploy/cert_watch.py", "bin/cert_watch.py"),
+    ("deploy/bd_refresh.py", "bin/bd_refresh.py"),
+]
 
 UNIT = """[Unit]
 Description=Meter check ({label})
@@ -93,7 +101,7 @@ def main():
         return (o.read() + e.read()).decode("utf-8", "replace").strip()
 
     print("目标：%s  %s  :%s" % (name, remote, t["port"]))
-    run("mkdir -p %s/data %s/vendor %s/bin" % (remote, remote, remote))
+    run("mkdir -p %s/data %s/vendor %s/bin %s/logs" % (remote, remote, remote, remote))
 
     # 1) 备份目标库
     ts = time.strftime("%Y%m%d-%H%M%S")
@@ -150,6 +158,23 @@ def main():
         print(run("systemctl daemon-reload && systemctl enable --now cert-watch.timer "
                   "> /dev/null 2>&1; systemctl is-active cert-watch.timer"))
 
+    # 5.5) 宝点登录态续期（只给正式；每 30 分钟看一次，剩不足 1 小时才重登）
+    if t["bd_refresh"]:
+        for unit_name in ("bd-refresh.service", "bd-refresh.timer"):
+            src_u = os.path.join(REPO, "deploy", unit_name)
+            if os.path.exists(src_u):
+                body = io.open(src_u, encoding="utf-8").read()
+                if unit_name.endswith(".service"):
+                    body = body.replace("{dir}", remote).replace("{venv}", BD_VENV)
+                sftp = c.open_sftp()
+                with sftp.open("/etc/systemd/system/" + unit_name, "w") as f:
+                    f.write(body)
+                sftp.close()
+        print(run("mkdir -p %s/logs; systemctl daemon-reload && "
+                  "systemctl enable --now bd-refresh.timer > /dev/null 2>&1; "
+                  "systemctl is-active bd-refresh.timer" % remote))
+
+
     print(run("systemctl daemon-reload && systemctl enable {svc} > /dev/null 2>&1; "
               "systemctl restart {svc} && sleep 2 && systemctl is-active {svc}"
               .format(svc=t["service"])))
@@ -161,3 +186,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
