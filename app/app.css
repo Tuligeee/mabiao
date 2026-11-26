@@ -1607,3 +1607,45 @@ body[data-scanning="1"] { overflow: hidden; }
   content: "·"; margin-inline-end: var(--space-2); color: var(--ink-3);
 }
 .machine__comms .chip { padding-inline-start: 0; }
+
+
+/* 编辑机台：竖排字段，像一张小表单 */
+.mf__head {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+.mf__t { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink); }
+.mf__x {
+  margin-inline-start: auto;
+  inline-size: 28px; block-size: 28px; display: grid; place-items: center;
+  border: 0; background: transparent; border-radius: var(--radius-md);
+  color: var(--ink-3); cursor: pointer;
+}
+.mf__x:hover { background: var(--hover); color: var(--ink); }
+
+.mf__field { display: block; margin-block-end: var(--space-3); }
+.mf__field .mf__k {
+  display: block; margin: 0 0 4px; padding: 0;
+  font-size: 11px; color: var(--ink-3); text-align: start; min-inline-size: 0;
+}
+.mf__field > .input, .mf__field > .pick { inline-size: 100%; }
+.mf__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.mf__acts {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+/* 行里卡头：P1：733720，不用间隔点 */
+.machine__comms .chip + .chip::before { content: none; }
+.machine__comms .chip b { color: var(--ink-2); }
+
+/* 编辑态回到正常流式布局：行布局是给只读态用的 */
+.machine[data-editing="true"] {
+  display: block;
+  grid-template-areas: none;
+  grid-template-columns: none;
+  padding: var(--space-4);
+  background: var(--card);
+  box-shadow: inset 3px 0 0 var(--accent);
+  cursor: default;
+}
+.machine[data-editing="true"] .mf__field { max-inline-size: 760px; }

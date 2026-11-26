@@ -2270,7 +2270,7 @@ function renderMachineView(card, g) {
   // 行里只报前两个，多了折成 +N，免得一串数字被切断
   all.slice(0, 2).forEach((x) => {
     const li = el('li', 'chip chip--pos');
-    li.appendChild(el('b', null, 'P' + x.p + ' '));
+    li.appendChild(el('b', null, 'P' + x.p + '：'));
     li.appendChild(el('span', null, x.comm));
     ul.appendChild(li);
   });
@@ -2374,7 +2374,17 @@ function renderMachineEdit(card, g) {
   card.dataset.editing = 'true';
   card.setAttribute('aria-label', '编辑机台 ' + g.key);
 
-  const rowN = el('div', 'mf__row');
+  const mh = el('div', 'mf__head');
+  mh.appendChild(el('span', 'mf__t', '编辑机台'));
+  const mx = el('button', 'mf__x');
+  mx.type = 'button';
+  mx.setAttribute('aria-label', '退出编辑');
+  mx.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  mx.addEventListener('click', () => { EDIT_KEY = null; renderUnits(); });
+  mh.appendChild(mx);
+  card.appendChild(mh);
+
+  const rowN = el('label', 'mf__field');
   rowN.appendChild(el('span', 'mf__k', '名称'));
   const nameIn = el('input', 'input mf__name');
   nameIn.type = 'text';
@@ -2387,7 +2397,7 @@ function renderMachineEdit(card, g) {
   // 品牌（只对弹珠机）
   let brandVal = g.brand || '';
   if ((g.kind || 'pusher') === 'pachinko') {
-    const row = el('div', 'mf__row');
+    const row = el('div', 'mf__field');
     row.appendChild(el('span', 'mf__k', '品牌'));
     const wrap = el('div', 'pick pick--block');
     const btn = el('button', 'pick__btn');
@@ -2419,7 +2429,7 @@ function renderMachineEdit(card, g) {
   }
 
   // 卡头
-  const rowC = el('div', 'mf__row mf__row--top');
+  const rowC = el('div', 'mf__field');
   rowC.appendChild(el('span', 'mf__k', '卡头'));
   const ul = el('ul', 'mf__chips');
   ul.setAttribute('aria-label', '通讯ID');
