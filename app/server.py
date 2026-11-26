@@ -656,6 +656,7 @@ def init_db():
         pcols = [r["name"] for r in c.execute("PRAGMA table_info(photos)")]
         if "expired" not in pcols:
             c.execute("ALTER TABLE photos ADD COLUMN expired INTEGER DEFAULT 0")
+    migrate_machines()
 
 
 def meta_get(k, default=None):
@@ -746,25 +747,26 @@ def sync_units(shop_id: str, devices: list) -> int:
         for name, ds in groups.items():
             team = ds[0].get("projectTeamName")
             kind = kind_of(team) or "pusher"
+            mid = ensure_machine(c, shop_id, name, kind)
             if team == SHARED_TEAM:
-                c.execute("INSERT INTO units(shop_id,name,team,shared,kind) VALUES(?,?,?,1,?) "
-                          "ON CONFLICT(shop_id,name) DO UPDATE SET team=excluded.team, "
-                          "shared=1, active=1, kind=excluded.kind", (shop_id, name, team, kind))
-                u = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
-                              (shop_id, name)).fetchone()["id"]
-                for d in ds:
-                    put_comm(c, d, u)
-                made += 1
+                c.execute("UPDATE machines SET shared=1, active=1 WHERE id=?", (mid,))
             else:
-                for d in ds:
-                    label = unique_unit_name(c, shop_id, name)
-                    c.execute("INSERT INTO units(shop_id,name,team,shared,kind) VALUES(?,?,?,0,?) "
-                              "ON CONFLICT(shop_id,name) DO UPDATE SET team=excluded.team, "
-                              "shared=0, active=1, kind=excluded.kind", (shop_id, label, team, kind))
-                    u = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
-                                  (shop_id, label)).fetchone()["id"]
-                    put_comm(c, d, u)
-                    made += 1
+                c.execute("UPDATE machines SET active=1 WHERE id=?", (mid,))
+            base = c.execute("SELECT name FROM machines WHERE id=?", (mid,)).fetchone()["name"]
+            for i, d in enumerate(ds, start=1):
+                cid = str(d.get("commId") or "").strip()
+                if not cid:
+                    continue
+                nm = base if i == 1 else "%s P%d" % (base, i)
+                c.execute("INSERT INTO units(shop_id,name,team,shared,active,kind,pos,machine_id,"
+                          "from_day) VALUES(?,?,?,0,1,?,?,?,?) "
+                          "ON CONFLICT(shop_id,name) DO UPDATE SET team=excluded.team, active=1, "
+                          "kind=excluded.kind, pos=excluded.pos, machine_id=excluded.machine_id",
+                          (shop_id, nm, team, kind, i, mid, date.today().isoformat()))
+                u = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
+                              (shop_id, nm)).fetchone()["id"]
+                put_comm(c, d, u)
+                made += 1
     return made
 
 
@@ -848,6 +850,104 @@ def comms_on(unit_id: int, day: str) -> list:
         return [str(r["comm_id"]) for r in c.execute(
             "SELECT DISTINCT comm_id FROM comm_owner WHERE unit_id=? AND from_day<=? "
             "AND (to_day IS NULL OR to_day>?) ORDER BY comm_id", (unit_id, day, day))]
+
+
+# ---------------------------------------------------------------- 机台（一台机多个 P 位）
+SHARED_DEFAULT = {"凤凰城", "法老也疯狂"}   # 4 个卡头共用 1 块码表的机型
+
+
+def machine_base(name: str) -> str:
+    """「可乐风暴 733586」「可乐风暴 P5」→「可乐风暴」"""
+    s = re.sub(r"\s+\d{5,}$", "", str(name or ""))
+    s = re.sub(r"\s*\(\d+\)\s*$", "", s)
+    s = re.sub(r"\s+P\d+$", "", s)
+    return s.strip() or str(name or "")
+
+
+def machine_of(unit_row) -> dict:
+    """取这台机所属的机台；没有就返回空。"""
+    mid = unit_row["machine_id"] if "machine_id" in unit_row.keys() else None
+    if not mid:
+        return {}
+    with conn() as c:
+        r = c.execute("SELECT * FROM machines WHERE id=?", (mid,)).fetchone()
+    return dict(r) if r else {}
+
+
+def machine_units(machine_id: int) -> list:
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM units WHERE machine_id=? ORDER BY pos, id", (machine_id,))]
+
+
+def machine_comms(machine_id: int, day: str | None = None) -> list:
+    """机台下的全部卡头（按 P 位排）；给 day 就是那天归属的。"""
+    out, seen = [], set()
+    for u in machine_units(machine_id):
+        cs = comms_on(u["id"], day) if day else [str(x["comm_id"]) for x in u["comms"]]
+        for cid in cs:
+            if cid not in seen:
+                seen.add(cid)
+                out.append(cid)
+    return out
+
+
+def migrate_machines() -> int:
+    """老库补「机台」这一层：按名字归组、每台一个 units（P 位），幂等。"""
+    made = 0
+    with conn() as c:
+        c.execute("CREATE TABLE IF NOT EXISTS machines("
+                  "id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id TEXT NOT NULL, "
+                  "name TEXT NOT NULL, kind TEXT DEFAULT 'pusher', shared INTEGER DEFAULT 0, "
+                  "active INTEGER DEFAULT 1, code TEXT, sort INTEGER DEFAULT 0, brand TEXT, "
+                  "UNIQUE(shop_id, name))")
+        # 只做一次性搬迁：已经有机器表就不再动（新机台由 save_unit / sync 自己建）
+        if c.execute("SELECT COUNT(*) FROM machines").fetchone()[0]:
+            return 0
+        ucols = [r["name"] for r in c.execute("PRAGMA table_info(units)")]
+        if "machine_id" not in ucols:
+            c.execute("ALTER TABLE units ADD COLUMN machine_id INTEGER")
+        rows = [dict(r) for r in c.execute("SELECT * FROM units WHERE machine_id IS NULL")]
+        groups: dict = {}
+        for u in rows:
+            groups.setdefault((u["shop_id"], machine_base(u["name"])), []).append(u)
+        for (shop_id, base), us in groups.items():
+            kind = (us[0].get("kind") or "pusher")
+            shared = 1 if base in SHARED_DEFAULT else 0
+            c.execute("INSERT OR IGNORE INTO machines(shop_id,name,kind,shared,active,code) "
+                      "VALUES(?,?,?,?,1,?)",
+                      (shop_id, base, kind, shared, us[0].get("code")))
+            m = c.execute("SELECT id FROM machines WHERE shop_id=? AND name=?",
+                          (shop_id, base)).fetchone()["id"]
+            ids = [u["id"] for u in us]
+            keep = us[0]
+            keep_id = keep["id"]
+            # 先把整组卡头挂到要保留的单元上，再删掉多余单元（comms.unit_id 不能为空）
+            qs = ",".join("?" * len(ids))
+            c.execute("UPDATE comms SET unit_id=? WHERE unit_id IN (%s)" % qs,
+                      [keep_id] + ids)
+            for u in us[1:]:
+                c.execute("DELETE FROM units WHERE id=?", (u["id"],))
+            c.execute("UPDATE units SET machine_id=?, name=?, pos=1 WHERE id=?",
+                      (m, base, keep_id))
+            comms = [str(r["comm_id"]) for r in c.execute(
+                "SELECT comm_id FROM comms WHERE unit_id=? ORDER BY comm_id", (keep_id,))]
+            # 一个卡头一个「码表位」；共用码表的机台在核对时再合并
+            for i, cid in enumerate(comms[1:], start=1):
+                c.execute("INSERT INTO units(shop_id,name,team,shared,active,sort,kind,code,pos,"
+                          "machine_id) VALUES(?,?,?,0,1,0,?,NULL,?,?)",
+                          (shop_id, "%s P%d" % (base, i + 1), keep.get("team"),
+                           keep.get("kind") or "pusher", i + 1, m))
+                nid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+                c.execute("UPDATE comms SET unit_id=? WHERE comm_id=?", (nid, cid))
+            made += 1
+        # 归属历史按新结构重建（读数已清空，不需要保历史）
+        if made:
+            c.execute("DELETE FROM comm_owner")
+            c.execute("INSERT INTO comm_owner(comm_id,unit_id,shop_id,from_day,to_day) "
+                      "SELECT m.comm_id, m.unit_id, u.shop_id, '1970-01-01', NULL "
+                      "FROM comms m JOIN units u ON u.id = m.unit_id WHERE m.unit_id IS NOT NULL")
+    return made
 
 
 def put_comm(c, d, unit_id):
@@ -1170,15 +1270,28 @@ def recon(shop_id: str, day: str, kind: str | None = None) -> dict:
         for r in c.execute("SELECT unit_id, COUNT(*) n, MAX(expired) ex FROM photos "
                            "WHERE shop_id=? AND day=? GROUP BY unit_id", (shop_id, day)):
             ph[r["unit_id"]] = {"n": r["n"], "expired": bool(r["ex"])}
+        mach = {r["id"]: dict(r) for r in c.execute("SELECT * FROM machines")}
 
-    rows = []
+    # 共用一块码表的机台：只留 P1 那一行，卡头算整台机的
+    shown = []
+    for u in units:
+        m = mach.get(u.get("machine_id")) or {}
+        if m.get("shared") and (u.get("pos") or 1) != 1:
+            continue
+        u = dict(u)
+        if m.get("shared"):
+            u["comms"] = [{"comm_id": x} for x in machine_comms(m["id"], day)]
+        shown.append(u)
+    units = shown
     today = date.today().isoformat()
+    rows = []
     for u in units:
         # 已停用的机台：当天没填过数就不再占核对页一格（停用当天填过的留最后一天）
         if not u["active"] and not reads.get(u["id"]) and day >= today:
             continue
         # 用「当天归属」的卡头，卡头换过机台也不改写历史
-        hist = comms_on(u["id"], day)
+        mu = mach.get(u.get("machine_id")) or {}
+        hist = machine_comms(mu["id"], day) if mu.get("shared") else comms_on(u["id"], day)
         comms = hist if hist else [str(x["comm_id"]) for x in u["comms"]]
         # 卡头ID 按 P 位排（P1 在前），和墙上/Excel 的顺序对得上
         comms_sorted = sorted(comms, key=lambda x: (cno.get(x, "~"), x))
@@ -1392,8 +1505,15 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             pics.setdefault(r["unit_id"], []).append(
                 {"id": r["id"], "at": r["at"], "w": r["w"], "h": r["h"],
                  "expired": bool(r["expired"])})
+        mach = {r["id"]: dict(r) for r in c.execute("SELECT * FROM machines")}
     rows = []
     for u in units:
+        m = mach.get(u.get("machine_id")) or {}
+        if m.get("shared") and (u.get("pos") or 1) != 1:
+            continue
+        if m.get("shared"):
+            u = dict(u)
+            u["comms"] = [{"comm_id": x} for x in machine_comms(m["id"], day)]
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day)
         comms = [str(x["comm_id"]) for x in u["comms"]]
@@ -1865,10 +1985,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "shop_id": sid})
             if p == "/api/units":
                 sid = b["shop_id"]
+                uid = int(b["unit_id"])
                 with conn() as c:
-                    c.execute("UPDATE units SET shared=?, active=? WHERE id=?",
-                              (1 if b.get("shared") else 0, 0 if b.get("hide") else 1,
-                               int(b["unit_id"])))
+                    c.execute("UPDATE units SET active=? WHERE id=?",
+                              (0 if b.get("hide") else 1, uid))
+                    if "shared" in b:
+                        # 合并/拆分 = 改机台的码表数，不动卡头、不动机台
+                        u = c.execute("SELECT machine_id FROM units WHERE id=?", (uid,)).fetchone()
+                        if u and u["machine_id"]:
+                            c.execute("UPDATE machines SET shared=? WHERE id=?",
+                                      (1 if b.get("shared") else 0, u["machine_id"]))
                 return self._send(200, {"ok": True})
             if p == "/api/shop/welcome":
                 return self._send(200, api_welcome_done(b))
@@ -2931,6 +3057,15 @@ def manage_units(shop_id: str) -> list:
         for u in us:
             u["comms"] = [dict(r) for r in c.execute(
                 "SELECT comm_id, console_no FROM comms WHERE unit_id=? ORDER BY comm_id", (u["id"],))]
+            m = c.execute("SELECT * FROM machines WHERE id=?", (u.get("machine_id") or 0,)).fetchone()
+            if m:
+                u["machine_id"] = m["id"]
+                u["machine_name"] = m["name"]
+                u["machine_shared"] = m["shared"]
+                u["machine_code"] = m["code"]
+                # 这台机一共几个码表位
+                u["machine_slots"] = c.execute(
+                    "SELECT COUNT(*) FROM units WHERE machine_id=?", (m["id"],)).fetchone()[0]
     return us
 
 
@@ -3018,6 +3153,15 @@ def remove_shop(shop_id: str) -> dict:
     return {"ok": True}
 
 
+def ensure_machine(c, shop_id: str, name: str, kind: str = "pusher") -> int:
+    """按机台名拿机台 id，没有就建。"""
+    base = machine_base(name)
+    c.execute("INSERT OR IGNORE INTO machines(shop_id,name,kind,shared,active) VALUES(?,?,?,0,1)",
+              (shop_id, base, kind))
+    return c.execute("SELECT id FROM machines WHERE shop_id=? AND name=?",
+                     (shop_id, base)).fetchone()["id"]
+
+
 def save_unit(b: dict) -> dict:
     shop_id = guard_shop(b["shop_id"])
     name = (b.get("name") or "").strip()
@@ -3034,36 +3178,48 @@ def save_unit(b: dict) -> dict:
         raise RuntimeError("至少要填一个通讯ID")
 
     with conn() as c:
-        uid = b.get("id")
-        if uid:
-            c.execute("UPDATE units SET name=?, brand=?, shared=?, locked=1, kind=? WHERE id=?",
-                      (name, (b.get("brand") or "").strip() or None, shared, kind, uid))
-            uid = int(uid)
-        else:
-            c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,brand,from_day) "
-                      "VALUES(?,?,?,?,1,1,?,?,?) "
-                      "ON CONFLICT(shop_id,name) DO UPDATE SET shared=excluded.shared, "
-                      "active=1, locked=1, kind=excluded.kind, brand=excluded.brand",
-                      (shop_id, name, b.get("team"), shared, kind,
-                       (b.get("brand") or "").strip() or None, date.today().isoformat()))
-            uid = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
-                            (shop_id, name)).fetchone()["id"]
-        # 先解绑不在新清单里的通讯ID
+        mid = ensure_machine(c, shop_id, name, kind)
+        c.execute("UPDATE machines SET shared=?, active=1, kind=?, brand=? WHERE id=?",
+                  (shared, kind, (b.get("brand") or "").strip() or None, mid))
+        base = c.execute("SELECT name FROM machines WHERE id=?", (mid,)).fetchone()["name"]
+        # this machine 现有的码表位
+        slots = [dict(r) for r in c.execute(
+            "SELECT * FROM units WHERE machine_id=? ORDER BY pos, id", (mid,))]
         keep = set(comms)
         today = date.today().isoformat()
-        for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (uid,)):
-            if r["comm_id"] not in keep:
-                c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
-                # 当天它还在上报，to_day 记明天，今天的数据照算
-                c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
-                          (_tomorrow(today), r["comm_id"]))
-        for cid in comms:
+        # 不在新清单里的卡头：解绑；位子留着但停用
+        for u in slots:
+            for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (u["id"],)):
+                if r["comm_id"] not in keep:
+                    c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
+                    c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
+                              (_tomorrow(today), r["comm_id"]))
+        for i, cid in enumerate(comms, start=1):
+            u = next((x for x in slots if (x["pos"] or 0) == i), None)
+            if u is None:
+                nm = base if i == 1 else "%s P%d" % (base, i)
+                c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,pos,"
+                          "machine_id,from_day,brand) VALUES(?,?,?,0,1,1,?,?,?,?,?) "
+                          "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, locked=1, "
+                          "machine_id=excluded.machine_id, pos=excluded.pos",
+                          (shop_id, nm, b.get("team"), kind, i, mid, today,
+                           (b.get("brand") or "").strip() or None))
+                u = c.execute("SELECT * FROM units WHERE shop_id=? AND name=?",
+                              (shop_id, nm)).fetchone()
+                slots.append(dict(u))
+            c.execute("UPDATE units SET active=1, locked=1, machine_id=?, pos=? WHERE id=?",
+                      (mid, i, u["id"]))
             c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
                       "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
                       "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
-                      (cid, uid, now()))
-            comm_owner_set(c, cid, uid, shop_id, today)
-    return {"ok": True, "id": uid}
+                      (cid, u["id"], now()))
+            comm_owner_set(c, cid, u["id"], shop_id, today)
+        # 多出来的位子停用（保留历史读数）
+        for u in slots:
+            n = c.execute("SELECT COUNT(*) FROM comms WHERE unit_id=?", (u["id"],)).fetchone()[0]
+            if not n:
+                c.execute("UPDATE units SET active=0 WHERE id=?", (u["id"],))
+    return {"ok": True, "machine_id": mid, "slots": len(comms)}
 
 
 def merge_units(shop_id: str, ids: list, name: str = "", lock: bool = True) -> dict:
