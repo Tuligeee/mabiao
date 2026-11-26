@@ -1750,7 +1750,7 @@ async function openBdSync(btn) {
   const cancel = el('button', 'btn btn--quiet', '取消');
   cancel.type = 'button';
   cancel.addEventListener('click', close);
-  const ok = el('button', 'btn btn--primary', '同步勾选的');
+  const ok = el('button', 'btn btn--primary', '同步');
   ok.type = 'button';
   ok.addEventListener('click', async () => {
     const picked = items.filter((x) => x.cb.checked).map((x) => ({
@@ -1769,7 +1769,7 @@ async function openBdSync(btn) {
     } catch (e) {
       toast(String(e.message || e), 'bad');
       ok.disabled = false;
-      ok.textContent = '同步勾选的';
+      ok.textContent = '同步';
     }
   });
   acts.appendChild(cancel);
