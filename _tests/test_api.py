@@ -178,7 +178,10 @@ def t_save_unit_needs_comm():
 
 
 def t_save_unit_move_comm():
-    """换卡头：旧卡头当天还在，次日起归新机。"""
+    """换卡头：旧卡头当天还在，次日起归新机台。
+
+    新模型（一台机多个码表位）：卡头落到这台机的某个码表位上，不再要求落在原来那一行。
+    """
     sid = mk_shop("接口店-换卡头")
     u1 = mk_unit(sid, "丁弹珠机-001", comm="M2001")
     u2 = mk_unit(sid, "丁弹珠机-002", comm="M2002")
@@ -188,7 +191,33 @@ def t_save_unit_move_comm():
     assert "M2001" in S.comms_on(u1, today), "搬迁当天旧机台还在"
     tom = (__import__("datetime").date.today() + __import__("datetime").timedelta(days=1)).isoformat()
     assert "M2001" not in S.comms_on(u1, tom), "次日起旧机台不再有"
-    assert "M2001" in S.comms_on(u2, tom), "次日起归新机台"
+    with S.conn() as c:
+        mid = c.execute("SELECT machine_id FROM units WHERE id=?", (u2,)).fetchone()["machine_id"]
+        slots = [r["id"] for r in c.execute(
+            "SELECT id FROM units WHERE machine_id=? AND shop_id=?", (mid, sid))]
+    hit = [x for x in slots if "M2001" in S.comms_on(x, tom)]
+    eq(len(hit), 1, "次日起归这台机的某个码表位")
+
+
+def t_save_unit_rename_no_dup():
+    """改名只改这一台机：不新建机台、不多出码表位、编号不变（2026-11-26 修）。"""
+    sid = mk_shop("接口店-改名不新建")
+    uid = mk_unit(sid, "戊弹珠机-001", comm="M3002")
+    with S.conn() as c:
+        code = c.execute("SELECT code FROM units WHERE id=?", (uid,)).fetchone()["code"]
+    S.save_unit({"shop_id": sid, "name": "戊弹珠机-改名后", "comms": "M3002",
+                 "kind": "pachinko", "brand": "戊", "id": uid})
+    with S.conn() as c:
+        row = c.execute("SELECT name,code,machine_id FROM units WHERE id=?", (uid,)).fetchone()
+        machines = c.execute("SELECT COUNT(*) n FROM machines WHERE shop_id=?", (sid,)).fetchone()["n"]
+        units = c.execute("SELECT COUNT(*) n FROM units WHERE shop_id=?", (sid,)).fetchone()["n"]
+        mname = c.execute("SELECT name FROM machines WHERE id=?",
+                          (row["machine_id"],)).fetchone()["name"]
+    eq(row["name"], "戊弹珠机-改名后", "码表位名字改了")
+    eq(row["code"], code, "编号不能变（二维码贴纸已经贴出去了）")
+    eq(machines, 1, "不能多出一台机台")
+    eq(units, 1, "不能多出码表位")
+    eq(mname, "戊弹珠机-改名后", "机台名跟着改")
 
 
 def t_save_unit_rename_keeps_code():
@@ -441,6 +470,7 @@ CASES = [
     ("机台没卡头要拒绝", t_save_unit_needs_comm),
     ("换卡头次日起归新机", t_save_unit_move_comm),
     ("改机台名不动编号", t_save_unit_rename_keeps_code),
+    ("改机台名不新建机台", t_save_unit_rename_no_dup),
     ("拆分机台", t_split_unit),
     ("合并机台带读数", t_merge_units),
     ("删机台连带读数", t_remove_unit),

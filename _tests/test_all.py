@@ -495,14 +495,20 @@ def t_freeze():
 def t_store_isolation():
     sid_a = mk_shop("测试店-甲店")
     sid_b = mk_shop("测试店-乙店")
-    S.ACTOR.me = {"id": "ST01", "name": "测试店-甲店", "type": "store", "shop": sid_a}
+    S.ACTOR.me = {"id": "ST01", "name": "测试店-甲店",
+                  "type": "store", "shop": sid_a}
     try:
-        eq(S.guard_shop(sid_b), sid_a, "越权访问别的店会落到自己店")
-        eq(S.guard_shop(sid_a), sid_a, "自己店正常")
+        try:
+            S.guard_shop(sid_b)
+            eq(True, False, "越权访问应拒绝")
+        except S.AuthError:
+            pass
+        eq(S.guard_shop(sid_a), sid_a, "自己店能访问")
+        eq(S.guard_shop(""), sid_a, "不带 shop_id 时默认自己店")
     finally:
         S.ACTOR.me = None
     # 完全没绑定的账号要拒绝
-    S.ACTOR.me = {"id": "ST99", "name": "没这家店", "type": "store", "shop": None}
+    S.ACTOR.me = {"id": "ST99", "name": "没绑店", "type": "store", "shop": None}
     try:
         try:
             S.guard_shop(sid_a)
@@ -511,6 +517,19 @@ def t_store_isolation():
             pass
     finally:
         S.ACTOR.me = None
+
+
+def t_comm_not_stolen():
+    """同号卡头出现在两家店的后台清单里时，同步不能把别家店的卡头抢过来。"""
+    a = mk_shop("测试店-抢卡头甲")
+    b = mk_shop("测试店-抢卡头乙")
+    S.save_unit({"shop_id": a, "name": "甲机", "kind": "pusher", "comms": "901234"})
+    res = S.save_unit({"shop_id": b, "name": "乙机", "kind": "pusher", "comms": "901234"})
+    eq(res.get("skipped"), ["901234"], "重复卡头被跳过")
+    with S.conn() as c:
+        own = c.execute("SELECT u.shop_id FROM comms m JOIN units u ON u.id=m.unit_id "
+                        "WHERE m.comm_id='901234'").fetchone()[0]
+    eq(own, a, "卡头仍归第一家")
 
 
 def t_store_cannot_set_provider():
@@ -675,6 +694,7 @@ CASES = [
     ("鲸舰按机台名对上上币", t_jingjian_match),
     ("冻结后改读数不影响核对", t_freeze),
     ("店长只能碰自己店", t_store_isolation),
+    ("同号卡头不被别家店抢走", t_comm_not_stolen),
     ("店长不能改取数方式", t_store_cannot_set_provider),
     ("取数方式非法值被拒", t_provider_validation),
     ("二维码输出 PNG", t_qr),

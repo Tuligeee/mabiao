@@ -50,7 +50,11 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
 DEFAULT_SHOP = "纯玩世界鄂州吾悦店"
+AUTOSEED = (os.environ.get("METER_AUTOSEED") or "").strip() in ("1", "true", "yes")
 HIDDEN_GROUPS = {"宝点集团"}      # 内部测试店，不进界面
+
+# 不在码表里出现的门店：测试店、已关店
+HIDDEN_SHOPS = ("\u60a6\u52a8\u4e91\u5c55\u5385\u5e97", "\u7535\u73a9\u4e91\u4f53\u9a8c\u5e97", "\u7efc\u5408\u573a\u5730\u4e91\u4f53\u9a8c\u5e97", "\u7687\u4e0a\u5feb\u70b9-\u6cf0\u5b89\u543e\u60a6\u5e97")
 
 # 任务管理平台（cwsj）：账号体系共用它的，不另建一套
 CWSJ_BASE = os.environ.get("CWSJ_BASE", "http://47.114.33.192/cwsj")
@@ -164,14 +168,18 @@ def ensure_codes():
         # 位置号：同一台机下按通讯ID顺序重排 P1..Pn。
         # 每次都全量重算 —— 只补 NULL 的话，删掉重建的机台会停在 P1（可乐风暴撞过一次）。
         rows = [dict(r) for r in c.execute(
-            "SELECT u.id, u.shop_id, u.name, "
+            "SELECT u.id, u.shop_id, u.name, u.machine_id, u.pos, "
             "  (SELECT MIN(comm_id) FROM comms WHERE unit_id=u.id) AS first_comm "
             "FROM units u ORDER BY u.shop_id, u.name, u.id")]
         groups = {}
         for r in rows:
-            # 「塔兰弹珠机-001 817879」和「萌力双胞胎弹珠机-001」都要归到同一组
-            base = re.sub(r"[\s\-_]+\d+$", "", r["name"]).strip() or r["name"]
-            groups.setdefault((r["shop_id"], base), []).append(r)
+            # 有机器就按机器归组；没有才退回按名字
+            if r.get("machine_id"):
+                key = (r["shop_id"], "m%d" % r["machine_id"])
+            else:
+                base = re.sub(r"[\s\-_]+\d+$", "", r["name"]).strip() or r["name"]
+                key = (r["shop_id"], base)
+            groups.setdefault(key, []).append(r)
         for _key, items in groups.items():
             used = {it["pos"] for it in items if it.get("pos")}
             nxt = 1
@@ -280,6 +288,8 @@ def guard_shop(shop_id: str) -> str:
     own = resolve_shop(a)
     if not own:
         raise AuthError("门店未绑定：任务平台里是「%s」" % (a.get("name") or "?") + "，请联系总部")
+    if shop_id and str(shop_id) != str(own):
+        raise AuthError("只能操作自己门店的数据")
     return own
 
 
@@ -547,10 +557,32 @@ def reset_baodian():
 
 # ---------------------------------------------------------------- 数据库
 def conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB)
+    # 并发写：多线程同时提交时不要立刻抛 database is locked，
+    # 先等锁（busy_timeout），WAL 让读写不互相挡（2026-11-27 修 P0 稳定）
+    c = sqlite3.connect(DB, timeout=20.0)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA busy_timeout=15000")
     c.execute("PRAGMA foreign_keys=ON")
+    try:
+        c.execute("PRAGMA journal_mode=WAL")
+        c.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.Error:
+        pass
     return c
+
+
+def retry_locked(fn, tries: int = 6, base: float = 0.05):
+    """撞到 database is locked 就退避重试；其它异常直接抛。"""
+    last = None
+    for i in range(max(1, tries)):
+        try:
+            return fn()
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e).lower() and "busy" not in str(e).lower():
+                raise
+            last = e
+            time.sleep(base * (2 ** i))
+    raise last
 
 
 SCHEMA = """
@@ -601,8 +633,24 @@ CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 
 
 def init_db():
+    # 1) 先建表（executescript 只建缺的表，幂等）
     with conn() as c:
         c.executescript(SCHEMA)
+        c.execute("CREATE TABLE IF NOT EXISTS shop_map("
+                  "cwsj_key TEXT PRIMARY KEY, shop_id TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS brand_alias("
+                  "key TEXT PRIMARY KEY, label TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS brand_flags("
+                  "brand TEXT PRIMARY KEY, flags TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS recon_notes("
+                  "shop_id TEXT, day TEXT, unit_id INTEGER, reason TEXT, note TEXT, "
+                  "updated_at TEXT, updated_by TEXT, PRIMARY KEY(shop_id,day,unit_id))")
+    # 2) 补「机台」这一层：machines 表 + units.machine_id。
+    #    必须排在 ensure_codes() 之前——ensure_codes() 要读 machine_id，
+    #    顺序反了没迁移过的库（正式库）启动就崩：no such column: u.machine_id（2026-11-26 修）
+    migrate_machines()
+    # 3) 老库补列 + 编号 / P 位
+    with conn() as c:
         # 老库：把当前 comms 归属补成历史（从 EPOCH 起一直归这台机）
         if not c.execute("SELECT 1 FROM comm_owner LIMIT 1").fetchone():
             for r in c.execute("SELECT m.comm_id, m.unit_id, u.shop_id FROM comms m "
@@ -618,15 +666,6 @@ def init_db():
             c.execute("ALTER TABLE shops ADD COLUMN units_confirmed TEXT")
         if "group_name" not in cols:
             c.execute("ALTER TABLE shops ADD COLUMN group_name TEXT")
-        c.execute("CREATE TABLE IF NOT EXISTS shop_map("
-                  "cwsj_key TEXT PRIMARY KEY, shop_id TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS brand_alias("
-                  "key TEXT PRIMARY KEY, label TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS brand_flags("
-                  "brand TEXT PRIMARY KEY, flags TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS recon_notes("
-                  "shop_id TEXT, day TEXT, unit_id INTEGER, reason TEXT, note TEXT, "
-                  "updated_at TEXT, updated_by TEXT, PRIMARY KEY(shop_id,day,unit_id))")
         ensure_codes()
         # 老机台补登记日（列在 ensure_codes 里才建出来，必须放它后面）
         c.execute("UPDATE units SET from_day = COALESCE((SELECT MIN(r.day) FROM readings r "
@@ -656,7 +695,6 @@ def init_db():
         pcols = [r["name"] for r in c.execute("PRAGMA table_info(photos)")]
         if "expired" not in pcols:
             c.execute("ALTER TABLE photos ADD COLUMN expired INTEGER DEFAULT 0")
-    migrate_machines()
 
 
 def meta_get(k, default=None):
@@ -694,6 +732,8 @@ def shop_of(d: dict):
 
 
 def ensure_shop(name: str) -> str:
+    if (name or "").strip() in HIDDEN_SHOPS:
+        raise RuntimeError("这家店在忽略名单里，不建")
     bd = baodian()
     s = next((x for x in bd.shops() if x["shopName"] == name), None)
     if not s:
@@ -724,17 +764,64 @@ def unique_unit_name(c, shop_id: str, base: str, skip_id=None) -> str:
             return cand
     return base
 
-def sync_units(shop_id: str, devices: list) -> int:
-    """按宝点设备清单推导码表单元。
+def pos_num(v):
+    """'P2' / '2' / 'p2 ' → 2；认不出来 → None。"""
+    m = re.match(r"^\s*P?\s*(\d+)\s*$", str(v or ""), re.I)
+    return int(m.group(1)) if m else None
 
-    默认一个卡头（通讯ID）一个码表：每个卡头的读数在宝点是分开记的。
-    子类型是「屏幕机」的，四联机共用一块码表，合成一个单元装 4 个通讯ID。
-    其余共用码表的机器，由店长在设置里手工合并。
+
+def _slot_name(base: str, pos: int) -> str:
+    return base if pos == 1 else "%s P%d" % (base, pos)
+
+
+def _move_day_reading(c, shop_id: str, day: str, old_uid: int, new_uid: int):
+    """卡头换到别的码表位时，把那一天已经抄的读数一起挪过去（同一天不能两行）。"""
+    if not day or old_uid == new_uid:
+        return
+    src = c.execute("SELECT * FROM readings WHERE shop_id=? AND unit_id=? AND day=?",
+                    (shop_id, old_uid, day)).fetchone()
+    if not src:
+        return
+    if c.execute("SELECT 1 FROM readings WHERE shop_id=? AND unit_id=? AND day=?",
+                 (shop_id, new_uid, day)).fetchone():
+        return                                   # 目标那天已经有数，别覆盖
+    cols = ("in_r", "out_r", "note", "updated_at", "p_tokens", "p_out", "p_cards",
+            "unit_snap", "per_coin_snap", "out_incl_snap")
+    c.execute("INSERT INTO readings(shop_id,unit_id,day,%s) VALUES(?,?,?,%s)"
+              % (",".join(cols), ",".join("?" * len(cols))),
+              (shop_id, new_uid, day, *[src[k] for k in cols]))
+    c.execute("DELETE FROM readings WHERE shop_id=? AND unit_id=? AND day=?",
+              (shop_id, old_uid, day))
+
+
+def sync_units(shop_id: str, devices: list, posmap: dict | None = None,
+               day: str | None = None) -> int:
+    """按宝点设备清单给卡头归位。
+
+    卡头在第几个码表位，只看**它自己的 P 位**（宝点「机台获分记录」的 consoleNo /
+    库里 comms.console_no），不看「当天清单里排第几」——宝点上币报表只返回当天有流水的
+    机台，按清单下标排会让卡头一天换一个位置、把别的码表位挤成空壳（2026-11-26 修）。
+
+    · 有 P 位的卡头进对应码表位；位置已经对上就不动（重复同步幂等）
+    · 没 P 位的：已经在某块码表上就原地不动；新卡头才接到第一个空位
+    · 共用码表的机台（屏幕机 / 凤凰城这类）多个卡头仍装**一块**码表（一块表一个读数）
+    · 同步完把「没卡头没读数」的空壳码表位停用，不再占录入/核对页
     """
     with conn() as c:
         locked = {r["comm_id"] for r in c.execute(
             "SELECT m.comm_id FROM comms m JOIN units u ON u.id = m.unit_id "
             "WHERE u.locked = 1")}
+        # 库里已经记下的 P 位；当天接口给的新值优先
+        pos_of = {str(r["comm_id"]): r["console_no"] or ""
+                  for r in c.execute("SELECT comm_id, console_no FROM comms")}
+        cur_unit = {str(r["comm_id"]): r["unit_id"]
+                    for r in c.execute("SELECT comm_id, unit_id FROM comms")}
+        comm_shop = {str(r["comm_id"]): r["shop_id"] for r in c.execute(
+            "SELECT m.comm_id, u.shop_id FROM comms m JOIN units u ON u.id=m.unit_id")}
+    for k, v in (posmap or {}).items():
+        if v:
+            pos_of[str(k)] = v
+
     scope = [d for d in devices
              if kind_of(d.get("projectTeamName"))
              and str(d.get("commId")) not in locked]
@@ -748,25 +835,149 @@ def sync_units(shop_id: str, devices: list) -> int:
             team = ds[0].get("projectTeamName")
             kind = kind_of(team) or "pusher"
             mid = ensure_machine(c, shop_id, name, kind)
-            if team == SHARED_TEAM:
-                c.execute("UPDATE machines SET shared=1, active=1 WHERE id=?", (mid,))
-            else:
-                c.execute("UPDATE machines SET active=1 WHERE id=?", (mid,))
             base = c.execute("SELECT name FROM machines WHERE id=?", (mid,)).fetchone()["name"]
-            for i, d in enumerate(ds, start=1):
+            shared = 1 if ((c.execute("SELECT shared FROM machines WHERE id=?", (mid,))
+                                .fetchone()["shared"] or 0)) else 0
+            c.execute("UPDATE machines SET shared=?, active=1 WHERE id=?", (shared, mid))
+
+            slots = [dict(r) for r in c.execute(
+                "SELECT id, name, pos FROM units WHERE machine_id=? ORDER BY pos, id", (mid,))]
+            by_pos = {}
+            for u in slots:
+                p = u["pos"] or 0
+                if p and p not in by_pos:
+                    by_pos[p] = u
+
+            # 这台机的卡头全集：今天上报的 + 已经挂着但今天没上报的（后者不参与归位，只保证不被挤走）
+            cids = []
+            for d in ds:
                 cid = str(d.get("commId") or "").strip()
-                if not cid:
+                if not cid or cid in cids:
                     continue
-                nm = base if i == 1 else "%s P%d" % (base, i)
-                c.execute("INSERT INTO units(shop_id,name,team,shared,active,kind,pos,machine_id,"
-                          "from_day) VALUES(?,?,?,0,1,?,?,?,?) "
-                          "ON CONFLICT(shop_id,name) DO UPDATE SET team=excluded.team, active=1, "
-                          "kind=excluded.kind, pos=excluded.pos, machine_id=excluded.machine_id",
-                          (shop_id, nm, team, kind, i, mid, date.today().isoformat()))
-                u = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
-                              (shop_id, nm)).fetchone()["id"]
-                put_comm(c, d, u)
-                made += 1
+                if comm_shop.get(cid) not in (None, shop_id):
+                    continue                  # 别的店的卡头，宝点旧记录里串号
+                cids.append(cid)
+            slot_ids = {u["id"] for u in slots}
+            for cid, uid_ in cur_unit.items():
+                if uid_ in slot_ids and cid not in cids and comm_shop.get(cid) in (None, shop_id):
+                    cids.append(cid)
+
+            desired: dict[int, list] = {}          # 码表位号 → [卡头]
+            if shared:
+                desired[1] = cids                  # 共用码表：几个卡头喂一块表
+            else:
+                rest = []
+                for cid in cids:
+                    p = pos_num(pos_of.get(cid))
+                    if p and p not in desired:
+                        desired[p] = [cid]
+                    else:
+                        rest.append(cid)
+                for cid in rest:                   # 没 P 位 / 撞位的：原地不动，或接第一个空位
+                    here = next((u for u in slots if u["id"] == cur_unit.get(cid)), None)
+                    p = (here or {}).get("pos") or 0
+                    if not p or p in desired:
+                        p = 1
+                        while p in desired:
+                            p += 1
+                    desired[p] = [cid]
+
+            # 先挑“落在哪个单元”上，再统一改名（两段改名，避开 UNIQUE(shop_id,name)）
+            used, plan = set(), []
+            for p in sorted(desired):
+                nm = _slot_name(base, p)
+                u = by_pos.get(p)
+                if shared:
+                    # 共用码表：优先留在卡头最多的那块表上，少搬家
+                    best = None
+                    for cand in slots:
+                        n = c.execute("SELECT COUNT(*) n FROM comms WHERE unit_id=?",
+                                      (cand["id"],)).fetchone()["n"]
+                        if best is None or n > best[1]:
+                            best = (cand, n)
+                    if best and best[1]:
+                        u = best[0]
+                if u and u["id"] in used:
+                    u = None
+                if u is None:
+                    for cid in desired[p]:
+                        cu = next((x for x in slots if x["id"] == cur_unit.get(cid)), None)
+                        if cu and cu["id"] not in used:
+                            u = cu
+                            break
+                if u is None:
+                    row = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
+                                    (shop_id, nm)).fetchone()
+                    if row and row["id"] not in used:
+                        u = {"id": row["id"], "name": nm, "pos": p}
+                if u is None:
+                    tmp = "~new-%s-%d" % (now(), p)
+                    c.execute("INSERT INTO units(shop_id,name,team,shared,active,kind,pos,"
+                              "machine_id,from_day) VALUES(?,?,?,0,1,?,?,?,?)",
+                              (shop_id, tmp, team, kind, p, mid, "2020-01-01"))
+                    u = {"id": c.execute("SELECT last_insert_rowid()").fetchone()[0],
+                         "name": nm, "pos": p}
+                used.add(u["id"])
+                plan.append((int(u["id"]), nm, p))
+
+            # 不用的旧单元若占着目标名字，先挪开
+            names = {nm for _, nm, _ in plan}
+            for u in slots:
+                if u["id"] not in used and u["name"] in names:
+                    c.execute("UPDATE units SET name=? WHERE id=?", ("~old-%d" % u["id"], u["id"]))
+            for uid_, _, _ in plan:
+                c.execute("UPDATE units SET name=? WHERE id=?", ("~tmp-%d" % uid_, uid_))
+
+            by_cid = {str(d.get("commId") or "").strip(): d for d in ds}
+            move_day = day or date.today().isoformat()
+            for uid_, nm, p in plan:
+                c.execute("UPDATE units SET name=?, pos=?, active=1, machine_id=?, "
+                          "team=COALESCE(?, team), kind=COALESCE(?, kind) WHERE id=?",
+                          (nm, p, mid, team, kind, uid_))
+                for cid in desired[p]:
+                    old = cur_unit.get(cid)
+                    put_comm(c, by_cid.get(cid) or {"commId": cid}, uid_)
+                    if old and int(old) != int(uid_):
+                        # 换码表位属于配置改动，当天生效：读数跟着走、归属当天就切，
+                        # 否则今天核对页会同时出现新旧两行（2026-11-26 修）
+                        _move_day_reading(c, shop_id, move_day, int(old), int(uid_))
+                        comm_owner_move(c, cid, uid_, shop_id, move_day)
+                        made += 1
+                    # 没 P 位的用算出来的位子补上，页面才有号可显示
+                    c.execute("UPDATE comms SET console_no=? WHERE comm_id=? "
+                              "AND (console_no IS NULL OR console_no='')", ("P%d" % p, cid))
+
+        # 收口一：改名时临时挪开的旧单元（~old-*）如果既没卡头也没读数，直接删掉
+        for r in [dict(x) for x in c.execute(
+                "SELECT id FROM units WHERE shop_id=? AND name LIKE '~%'", (shop_id,))]:
+            uid_ = r["id"]
+            if c.execute("SELECT 1 FROM comms WHERE unit_id=?", (uid_,)).fetchone():
+                continue
+            if c.execute("SELECT 1 FROM readings WHERE unit_id=?", (uid_,)).fetchone():
+                continue
+            c.execute("DELETE FROM units WHERE id=?", (uid_,))
+
+        # 收口一续：共用码表的机台只有「一块表」，多出来的空位（没卡头没读数）删掉
+        for m in [dict(x) for x in c.execute(
+                "SELECT id FROM machines WHERE shop_id=? AND shared=1", (shop_id,))]:
+            for r in [dict(x) for x in c.execute(
+                    "SELECT id FROM units WHERE machine_id=?", (m["id"],))]:
+                uid_ = r["id"]
+                if c.execute("SELECT 1 FROM comms WHERE unit_id=?", (uid_,)).fetchone():
+                    continue
+                if c.execute("SELECT 1 FROM readings WHERE unit_id=?", (uid_,)).fetchone():
+                    continue
+                c.execute("DELETE FROM units WHERE id=?", (uid_,))
+
+        # 收口二：没卡头也没读数的码表位停用。
+        # 只收拾“这台机已经有卡头”的（纯手工店 / 还没接卡头的机台不动，免得把正常机台藏起来）；
+        # 全店范围做，今天没上报的机台也一起收，不然它会一直挂在录入页上。
+        c.execute("UPDATE units SET active=0 WHERE shop_id=? AND active=1 "
+                  "AND id NOT IN (SELECT unit_id FROM comms) "
+                  "AND id NOT IN (SELECT unit_id FROM readings) "
+                  "AND machine_id IN (SELECT DISTINCT u2.machine_id FROM units u2 "
+                  "  JOIN comms m ON m.unit_id=u2.id WHERE u2.machine_id IS NOT NULL)",
+                  (shop_id,))
     return made
 
 
@@ -958,15 +1169,22 @@ def migrate_machines() -> int:
 
 def put_comm(c, d, unit_id):
     cid = str(d.get("commId"))
+    u = c.execute("SELECT shop_id FROM units WHERE id=?", (unit_id,)).fetchone()
+    own = c.execute("SELECT u.shop_id FROM comms m JOIN units u ON u.id=m.unit_id "
+                    "WHERE m.comm_id=?", (cid,)).fetchone()
+    if u and own and own["shop_id"] != u["shop_id"]:
+        return False                 # 这个卡头已经是别家店的，别抢（宝点旧设备记录会串号）
+    # console_no 只在这次真有值时覆盖：上币清单里没有 P 位，别把已经记下的 P 位擦掉
     c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
               "VALUES(?,?,?,?,?,?) ON CONFLICT(comm_id) DO UPDATE SET "
-              "unit_id=excluded.unit_id, console_no=excluded.console_no, "
+              "unit_id=excluded.unit_id, console_no=COALESCE(excluded.console_no, comms.console_no), "
               "team=excluded.team, device=excluded.device, updated_at=excluded.updated_at",
               (cid, unit_id, d.get("consoleNo"),
                d.get("projectTeamName"), d.get("deviceName"), now()))
     u = c.execute("SELECT shop_id FROM units WHERE id=?", (unit_id,)).fetchone()
     if u:
         comm_owner_set(c, cid, unit_id, u["shop_id"], date.today().isoformat())
+    return True
 
 
 def units_of(shop_id: str, active_only: bool = True, kind: str | None = None,
@@ -1143,7 +1361,7 @@ def fetch_day(shop_id: str, day: str) -> dict:
             if row:
                 c.execute("UPDATE comms SET console_no=COALESCE(?,console_no), updated_at=? "
                           "WHERE comm_id=?", (r.get("consoleNo"), ts, cid))
-    return {"up_rows": len(U), "down_rows": len(D)}
+    return {"up_rows": len(U), "down_rows": len(D), "_up": up, "_down": down}
 
 
 # 抄表在次日早上做：码表读数是当天日终值，第二天来填。
@@ -1520,6 +1738,8 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
                 {"id": r["id"], "at": r["at"], "w": r["w"], "h": r["h"],
                  "expired": bool(r["expired"])})
         mach = {r["id"]: dict(r) for r in c.execute("SELECT * FROM machines")}
+        cno = {str(r["comm_id"]): (r["console_no"] or "")
+               for r in c.execute("SELECT comm_id, console_no FROM comms")}
     rows = []
     seen_shared = set()
     for u in units:
@@ -1530,7 +1750,10 @@ def entry_view(shop_id: str, day: str, kind: str | None = None) -> dict:
             seen_shared.add(m["id"])
             u = dict(u)
             u["name"] = m["name"]
-            u["comms"] = [{"comm_id": x} for x in machine_comms(m["id"], day)]
+            # 共用码表：几个卡头一块表，P 位照 comms.console_no 给，别再显示成「未标」
+            u["comms"] = sorted([{"comm_id": x, "console_no": cno.get(str(x), "")}
+                                 for x in machine_comms(m["id"], day)],
+                                key=lambda x: (x["console_no"] or "~", x["comm_id"]))
         rd = reads.get(u["id"])
         pv = prev_reading(shop_id, u["id"], day)
         comms = [str(x["comm_id"]) for x in u["comms"]]
@@ -1906,9 +2129,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, api_photos(q))
             if p == "/api/bd/status":
                 return self._send(200, api_bd_status(q))
+            if p == "/api/manage/bd-sync/progress":
+                return self._send(200, bd_sync_progress((q.get("job_id") or [""])[0]))
             if p == "/api/manage/bd-sync/preview":
                 sid = (q.get("shop_id") or [""])[0] or (resolve_shop(actor()) or "")
                 days = int((q.get("days") or ["30"])[0])
+                prov = (shop_row(sid) or {}).get("provider") or "baodian"
+                if prov in ("jingjian", "shiruan"):
+                    # 鲸舰 / 世软：机台从各自后台取（宝点那套只认宝点接口）
+                    import backend_sync
+                    return self._send(200, backend_sync.preview_rows(sid, min(days, 14)))
                 return self._send(200, bd_sync_preview(sid, days))
             if p == "/api/manage/devices":
                 return self._send(200, api_manage_devices(q))
@@ -1945,6 +2175,11 @@ class Handler(BaseHTTPRequestHandler):
             if p.startswith("/api/"):
                 return self._send(404, {"error": "no such api"})
             return self._static(p)
+        except AuthError as e:
+            msg = str(e)
+            code = 403 if ("只有总部" in msg or "绑定" in msg
+                           or "只能操作自己门店" in msg) else 401
+            return self._send(code, {"error": msg})
         except Exception as e:
             return self._send(500, {"error": str(e)[:400]})
 
@@ -1972,22 +2207,30 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/api/recon/note":
                 return self._send(200, api_recon_note(b))
             if p == "/api/entry":
-                return self._send(200, save_readings(b["shop_id"], b["day"], b.get("items") or []))
+                sid = guard_shop(b["shop_id"])
+                return self._send(200, retry_locked(
+                    lambda: save_readings(sid, b["day"], b.get("items") or [])))
             if p == "/api/photo":
-                return self._send(200, save_photo(b["shop_id"], int(b["unit_id"]), b["day"],
+                sid = guard_shop(b["shop_id"])
+                return self._send(200, save_photo(sid, int(b["unit_id"]), b["day"],
                                                   b.get("data") or "", b.get("w"), b.get("h")))
             if p == "/api/fetch":
-                sid, day = b["shop_id"], b["day"]
+                sid, day = guard_shop(b["shop_id"]), b["day"]
                 prov = (shop_row(sid) or {}).get("provider") or "baodian"
                 if prov == "manual":
                     # 纯手工店没有卡头，不需要跟任何系统取数
                     return self._send(200, {"ok": True, "provider": "manual",
                                             "skipped": "纯手工门店，不用取数"})
-                # 宝点上币只对宝点店做；鲸舰/世软走各自的机台汇总
+                r = retry_locked(lambda: fetch_day(sid, day))
+                # 宝点店：取完数再按「卡头自己的 P 位」归位（鲸舰/世软是机台维度，不归位）
                 if prov not in ("jingjian", "shiruan"):
-                    devices = baodian(sid).fetch_up(shop_of(shop_row(sid)), day)
-                    sync_units(sid, devices)
-                r = fetch_day(sid, day)
+                    up = r.pop("_up", []) or []
+                    down = r.pop("_down", []) or []
+                    posmap = {str(x.get("commId")): x.get("consoleNo")
+                              for x in down if x.get("consoleNo")}
+                    sync_units(sid, up, posmap, day)
+                r.pop("_up", None)
+                r.pop("_down", None)
                 return self._send(200, {"ok": True, **r})
             if p == "/api/backfill":
                 sid = b["shop_id"]
@@ -2001,7 +2244,7 @@ class Handler(BaseHTTPRequestHandler):
                 sid = ensure_shop(name)
                 return self._send(200, {"ok": True, "shop_id": sid})
             if p == "/api/units":
-                sid = b["shop_id"]
+                sid = guard_shop(b["shop_id"])
                 uid = int(b["unit_id"])
                 with conn() as c:
                     c.execute("UPDATE units SET active=? WHERE id=?",
@@ -2014,6 +2257,7 @@ class Handler(BaseHTTPRequestHandler):
                                       (1 if b.get("shared") else 0, u["machine_id"]))
                 return self._send(200, {"ok": True})
             if p == "/api/shop/welcome":
+                guard_shop(b["shop_id"])
                 return self._send(200, api_welcome_done(b))
             if p == "/api/login":
                 r = cwsj_login((b.get("account") or "").strip(), b.get("pwd") or "")
@@ -2024,6 +2268,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, save_shop(b))
             if p == "/api/manage/shop/remove":
                 return self._send(200, remove_shop(b["id"]))
+            if p == "/api/manage/bd-sync/start":
+                return self._send(200, bd_sync_start(
+                    (b.get("shop_id") or "").strip()
+                    or (resolve_shop(actor()) or ""), int(b.get("days") or 14)))
             if p == "/api/manage/bd-sync/apply":
                 sid = (b.get("shop_id") or "").strip() or (resolve_shop(actor()) or "")
                 return self._send(200, bd_sync_apply(sid, b.get("items") or []))
@@ -2051,6 +2299,7 @@ class Handler(BaseHTTPRequestHandler):
                 ensure_codes()
                 return self._send(200, r)
             if p == "/api/setup/shops":
+                require_hq()
                 r = sync_all_shops()
                 return self._send(200, {"ok": True, **r})
             if p == "/api/setup/units":
@@ -2081,7 +2330,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         except AuthError as e:
             msg = str(e)
-            code = 403 if ("只有总部" in msg or "绑定" in msg) else 401
+            code = 403 if ("只有总部" in msg or "绑定" in msg
+                           or "只能操作自己门店" in msg) else 401
             return self._send(code, {"error": msg})
         except Exception as e:
             return self._send(500, {"error": str(e)[:400]})
@@ -2110,6 +2360,7 @@ def shops_with_units() -> list:
             "WHERE COALESCE(s.group_name,'') NOT IN (%s) OR u.id IS NOT NULL "
             "GROUP BY s.id ORDER BY s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
             tuple(HIDDEN_GROUPS))]
+    rs = [x for x in rs if (x.get("name") or "") not in HIDDEN_SHOPS]
     return rs
 
 
@@ -2234,29 +2485,33 @@ _BD_POS_CACHE: dict = {}          # shop_id -> (取的时刻, {comm: P位})，�
 
 
 def bd_pos_matrix(shop_id: str, days: int = 30) -> dict:
-    """从宝点「下币汇总」收集 卡头 → P 位（consoleNo）。
+    """从宝点「下币记录」按天扫，凑 卡头 -> P 位（consoleNo）。
 
-    只有下币记录里带 consoleNo，且只报当天有下币的设备，
-    所以扫最近 N 天，取每个卡头第一次出现的值。结果缓存 6 小时（扫一次约 12 秒）。
+    逐天串行太慢（30 天要半分钟），改成并发拉；结果按门店缓存 6 小时。
     """
     hit = _BD_POS_CACHE.get(shop_id)
     if hit and time.time() - hit[0] < 6 * 3600:
         return dict(hit[1])
     shop = shop_of(shop_row(shop_id))
     bd = baodian(shop_id)
+    from concurrent.futures import ThreadPoolExecutor
+
+    day_list = [(date.today() - timedelta(days=i)).isoformat() for i in range(1, max(1, days) + 1)]
     pos: dict = {}
-    for i in range(1, max(1, days) + 1):
-        day = (date.today() - timedelta(days=i)).isoformat()
+
+    def one(day: str):
         try:
-            rows = bd.fetch_down(shop, day)
+            return bd.fetch_down(shop, day)
         except Exception:
-            continue
-        for r in rows:
-            cid = str(r.get("commId") or "")
-            cn = (r.get("consoleNo") or "").strip()
-            if cid and cn:
-                pos.setdefault(cid, cn)
-        time.sleep(0.2)
+            return []
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for rows in ex.map(one, day_list):
+            for r in rows:
+                cid = str(r.get("commId") or "")
+                cn = (r.get("consoleNo") or "").strip()
+                if cid and cn:
+                    pos.setdefault(cid, cn)
     _BD_POS_CACHE[shop_id] = (time.time(), dict(pos))
     return pos
 
@@ -2318,6 +2573,10 @@ def sync_pos(shop_id: str, days: int = 30) -> dict:
 BD_PACHINKO_TEAMS = ("弹珠机", "出珠弹珠机", "蓝票弹珠机", "红票弹珠机")
 # 只认「推币机类」这个大类的子分组，别的一概不进码表（2026-11-26 用户口径）
 BD_PUSHER_TEAMS = ("推币机", "其他推币机", "屏幕类", "连排推币类", "中岛推币类")
+
+# 2026-11-27：宝点子类型里的这些名字原来没进白名单，导致推币机被整台丢掉
+BD_PUSHER_TEAMS = tuple(BD_PUSHER_TEAMS) + ("\u5c4f\u5e55\u673a", "\u8fde\u6392\u63a8\u5e01\u673a", "\u4e2d\u5c9b\u63a8\u5e01\u7c7b", "\u4e2d\u5bfc\u63a8\u5e01\u7c7b", "\u5c4f\u5e55\u7c7b", "\u8fde\u6392\u63a8\u5e01\u7c7b")
+BD_PACHINKO_TEAMS = tuple(BD_PACHINKO_TEAMS) + ("\u51fa\u73e0\u5f39\u73e0\u673a", "\u51fa\u70b9\u5f39\u73e0\u673a")
 # 不做关键词兜底：名字像不等于就是，误判会把彩票机、儿童屏幕机拉进码表
 TEAM_KIND_KW = ()
 
@@ -2357,6 +2616,7 @@ def bd_device_list(shop_id: str) -> list:
                 unknown.setdefault(team or "(没分组)", []).append(
                     (x.get("deviceName") or "").strip())
                 continue
+
             comms = [c.strip() for c in str(x.get("commIds") or "").split(",") if c.strip()]
             # 脏数据：宝点里有 commIds 是 "0" 的（彩虹王国），不是真卡头，跳过
             comms = [c for c in comms if c.isdigit() and c != "0"]
@@ -2373,15 +2633,8 @@ def bd_device_list(shop_id: str) -> list:
     return out
 
 
-def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
-    """拉宝点机台清单 + P位，和本地比对，给出一张待同步表。"""
-    shop_id = guard_shop(shop_id)
-    devices = bd_device_list(shop_id)
-    pos = bd_pos_matrix(shop_id, days)
-    # 近 30 天没下币的机台（长期停开）再往前翻 180 天，别让它们一直显示「未标」
-    need = {c for d in devices for c in d["comms"]}
-    if need - set(pos):
-        pos = bd_pos_deep(shop_id, need)
+def _preview_rows(shop_id: str, devices: list, pos: dict) -> dict:
+    """机台清单 + P 位 -> 弹窗表格用的行（含与本地比对）。"""
     with conn() as c:
         units = c.execute("SELECT id,name,kind,locked FROM units WHERE shop_id=? AND active=1",
                           (shop_id,)).fetchall()
@@ -2395,18 +2648,15 @@ def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
         hit = next((u for u in units if cmap.get(u["id"], set()) & set(d["comms"])), None)
         if not hit:
             hit = next((u for u in units if (u["name"] or "").strip() == d["name"]), None)
-        local = None
-        status = "new"
+        local, status = None, "new"
         if hit:
             uc = sorted(cmap.get(hit["id"], set()))
-            same = ((hit["name"] or "").strip() == d["name"]
-                    and set(uc) == set(d["comms"]))
+            same = ((hit["name"] or "").strip() == d["name"] and set(uc) == set(d["comms"]))
             status = "same" if same else "update"
             local = {"unit_id": hit["id"], "name": hit["name"], "kind": hit["kind"],
                      "comms": uc, "locked": bool(hit["locked"])}
-        rows.append({"name": d["name"], "kind": d["kind"], "team": d["team"],
-                     "comms": d["comms"],
-                     "pos": _poss_from_map(pos, d["comms"]),
+        rows.append({"name": d["name"], "kind": d["kind"], "team": d.get("team"),
+                     "comms": d["comms"], "pos": _poss_from_map(pos, d["comms"]),
                      "status": status, "local": local,
                      "local_name": (local or {}).get("name"),
                      "local_comms": (local or {}).get("comms") or [],
@@ -2419,16 +2669,116 @@ def bd_sync_preview(shop_id: str, days: int = 30) -> dict:
         if uc and not (uc & bd_comms):
             orphan.append({"unit_id": u["id"], "name": u["name"], "kind": u["kind"],
                            "comms": sorted(uc)})
+    return {"rows": rows, "orphan": orphan, "pos_have": len(pos), "devices": len(devices)}
+
+
+def bd_sync_preview(shop_id: str, days: int = 14) -> dict:
+    """同步预览（同步版，保留给接口兼容用）。"""
+    shop_id = guard_shop(shop_id)
+    devices = bd_device_list(shop_id)
+    pos = bd_pos_matrix(shop_id, days)
+    need = {c for d in devices for c in d["comms"]}
+    miss = need - set(pos)
+    if miss and len(miss) * 10 > len(need) * 4:
+        pos = bd_pos_deep(shop_id, need, 60)
+    out = _preview_rows(shop_id, devices, pos)
     unknown = getattr(bd_device_list, "unknown", {}) or {}
-    return {"ok": True, "rows": rows, "orphan": orphan,
+    return {"ok": True, "rows": out["rows"], "orphan": out["orphan"],
             "unknown": [{"team": k, "machines": v} for k, v in sorted(unknown.items())],
-            "pos_have": len(pos), "devices": len(devices), "days": days}
+            "pos_have": out["pos_have"], "devices": out["devices"], "days": days}
+
+
+SYNC_JOBS: dict = {}
+_JOBS_LOCK = threading.Lock()
+
+
+def bd_sync_start(shop_id: str, days: int = 14) -> dict:
+    """起一个后台任务去拉机台 + P 位，立刻返回 job_id（前端轮询进度）。"""
+    shop_id = guard_shop(shop_id)
+    job_id = "j%d" % int(time.time() * 1000)
+    job = {"id": job_id, "state": "running", "done": 0, "total": 0,
+           "rows": None, "orphan": None, "error": "", "t0": time.time()}
+    with _JOBS_LOCK:
+        SYNC_JOBS[job_id] = job
+        for k in list(SYNC_JOBS)[:-20]:            # 只留最近 20 个
+            SYNC_JOBS.pop(k, None)
+
+    def work():
+        try:
+            prov = (shop_row(shop_id) or {}).get("provider") or "baodian"
+            if prov in ("jingjian", "shiruan"):
+                # 鲸舰/世软：机台从各自后台取（宝点那套接口不认这两家）
+                import backend_sync
+                out = backend_sync.preview_rows(shop_id, days)
+                job["rows"] = out["rows"]
+                job["orphan"] = out["orphan"]
+                job["unknown"] = out.get("unknown") or []
+                job["pos_have"] = out.get("pos_have") or 0
+                job["days"] = days
+                job["total"] = job["done"] = len(out["rows"])
+                job["state"] = "done"
+                return
+            devices = bd_device_list(shop_id)
+            job["total"] = len(devices)
+            job["pos"] = 0
+            store = shop_of(shop_row(shop_id))
+            bd = baodian(shop_id)
+            pos: dict = {}
+            need = {c for d in devices for c in d["comms"]}
+            for i in range(1, max(1, days) + 1):
+                day = (date.today() - timedelta(days=i)).isoformat()
+                try:
+                    rows = bd.fetch_down(store, day)
+                except Exception:
+                    rows = []
+                for r in rows:
+                    cid = str(r.get("commId") or "")
+                    cn = (r.get("consoleNo") or "").strip()
+                    if cid and cn:
+                        pos.setdefault(cid, cn)
+                job["pos"] = len(pos)
+                job["done"] = sum(1 for d in devices if any(c in pos for c in d["comms"]))
+            miss = need - set(pos)
+            if miss and len(miss) * 10 > len(need) * 4:
+                pos = bd_pos_deep(shop_id, need, 60)
+                job["pos"] = len(pos)
+                job["done"] = sum(1 for d in devices if any(c in pos for c in d["comms"]))
+            out = _preview_rows(shop_id, devices, pos)
+            unknown = getattr(bd_device_list, "unknown", {}) or {}
+            job["rows"] = out["rows"]
+            job["orphan"] = out["orphan"]
+            job["unknown"] = [{"team": k, "machines": v} for k, v in sorted(unknown.items())]
+            job["pos_have"] = out["pos_have"]
+            job["days"] = days
+            job["state"] = "done"
+        except Exception as e:                      # noqa: BLE001
+            job["state"] = "error"
+            job["error"] = str(e)[:300]
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+def bd_sync_progress(job_id: str) -> dict:
+    with _JOBS_LOCK:
+        job = SYNC_JOBS.get(job_id)
+    if not job:
+        raise RuntimeError("任务不存在或已过期")
+    out = {"state": job["state"], "done": job["done"], "total": job["total"],
+           "pos": job.get("pos") or 0, "error": job.get("error") or ""}
+    if job["state"] == "done":
+        out.update({"rows": job["rows"], "orphan": job["orphan"],
+                    "unknown": job.get("unknown") or [],
+                    "pos_have": job.get("pos_have") or 0,
+                    "devices": job["total"], "days": job.get("days") or 14})
+    return out
 
 
 def bd_sync_apply(shop_id: str, items: list) -> dict:
-    """把用户勾选的宝点机台写进本地：名称/类型/卡头/P位全部以宝点为准。"""
+    """把勾选的机台写进本地：一台机一次写完（名称/类型/卡头/P位都以后台为准）。"""
     shop_id = guard_shop(shop_id)
-    created = updated = pos_n = merged = 0
+    created = updated = pos_n = 0
+    skipped = []
     for it in items or []:
         name = (it.get("name") or "").strip()
         kind = it.get("kind")
@@ -2436,42 +2786,28 @@ def bd_sync_apply(shop_id: str, items: list) -> dict:
         if not name or kind not in ("pusher", "pachinko") or not comms:
             continue
         uid = it.get("unit_id")
-        # 这些卡头现在挂在哪些机台上：合并后如果它们空了，停用掉，不留空壳
-        with conn() as c:
-            marks = ",".join("?" * len(comms))
-            owners = {r["unit_id"] for r in c.execute(
-                "SELECT unit_id FROM comms WHERE comm_id IN (%s)" % marks, comms)}
-        # 默认一台卡头一块码表：宝点一个机台带 4 个卡头，同步下来是 4 行，不自动并成「共用码表」
-        targets = set()
-        for i, cid in enumerate(comms):
-            # 拆开的几块仍归同一台机：第一块用原名，其余自动加 (2)(3)(4)，
-            # 这样设置页还是一行一台机、显示 N 个卡头，只是不再是「共用码表」
-            with conn() as c:
-                raw_name = name if i == 0 else "%s P%d" % (name, i + 1)
-                sub = unique_unit_name(c, shop_id, raw_name, skip_id=(uid if i == 0 else None))
-            res = save_unit({"shop_id": shop_id, "id": (uid if i == 0 else None),
-                             "name": sub, "kind": kind, "comms": [cid], "shared": False})
-            targets.add(res["id"])
-            if i == 0 and uid:
-                updated += 1
-            else:
-                created += 1
-        with conn() as c:
-            for other in owners - targets:
-                left = c.execute("SELECT COUNT(*) FROM comms WHERE unit_id=?",
-                                 (other,)).fetchone()[0]
-                if not left:
-                    c.execute("UPDATE units SET active=0, locked=1 WHERE id=?", (other,))
-                    merged += 1
+        pos_list = it.get("pos") or []
+        pos_map = {cid: p for cid, p in zip(comms, pos_list) if p}
+        res = save_unit({"shop_id": shop_id, "id": uid or None, "name": name,
+                         "kind": kind, "comms": comms, "shared": False}, pos_map)
+        skipped += res.get("skipped") or []
+        if res.get("id") is None:
+            continue
+        if uid:
+            updated += 1
+        else:
+            created += 1
+        # P 位：跟卡头一一对应写进去（只写本店的卡头，别改到别家店的同名卡头）
         pos = it.get("pos") or []
         with conn() as c:
             for cid, p in zip(comms, pos):
                 if p:
-                    c.execute("UPDATE comms SET console_no=?, updated_at=? WHERE comm_id=?",
-                              (p, now(), cid))
+                    c.execute("UPDATE comms SET console_no=?, updated_at=? WHERE comm_id=? "
+                              "AND unit_id IN (SELECT id FROM units WHERE shop_id=?)",
+                              (p, now(), cid, shop_id))
                     pos_n += 1
-    return {"ok": True, "created": created, "updated": updated, "pos": pos_n, "merged": merged}
-
+    return {"ok": True, "created": created, "updated": updated, "pos": pos_n,
+            "merged": 0, "skipped": skipped}
 
 
 QR_DESIGN = 3   # 贴纸版式版本，改一次 +1，图片 URL 跟着变，避免浏览器用旧缓存
@@ -2992,7 +3328,7 @@ def save_brand_flags(b: dict) -> dict:
 def api_bootstrap():
     init_db()
     sid = meta_get("shop_id")
-    if not sid:
+    if not sid and AUTOSEED:
         try:
             sid = ensure_shop(DEFAULT_SHOP)
             meta_set("shop_id", sid)
@@ -3005,6 +3341,7 @@ def api_bootstrap():
         "OR EXISTS (SELECT 1 FROM units u WHERE u.shop_id=s.id AND u.active=1) "
         "ORDER BY s.group_name, s.name" % ",".join("?" * len(HIDDEN_GROUPS)),
         tuple(HIDDEN_GROUPS))]
+    shops = [x for x in shops if (x.get("name") or "") not in HIDDEN_SHOPS]
     # 门店身份：只看得见自己这一家
     if is_store():
         own = resolve_shop(actor())
@@ -3013,6 +3350,8 @@ def api_bootstrap():
             sid = own
         else:
             shops = []
+    if not sid and shops:
+        sid = shops[0]["id"]          # 没记过就落到第一家店，前端才有 shop_id 可用
     units = units_of(sid) if sid else []
     bd_ok, bd_msg = True, ""
     try:
@@ -3021,7 +3360,7 @@ def api_bootstrap():
         bd_ok, bd_msg = False, str(e)[:200]
 
     # 第一次进来：还没有机台清单就从宝点拉一份（按推币机大类推导）
-    if sid and bd_ok and not units:
+    if sid and bd_ok and not units and AUTOSEED:
         try:
             info = sync_units_best(sid)
             units = units_of(sid)
@@ -3195,29 +3534,108 @@ def ensure_machine(c, shop_id: str, name: str, kind: str = "pusher") -> int:
                      (shop_id, base)).fetchone()["id"]
 
 
-def save_unit(b: dict) -> dict:
+def rename_machine(c, shop_id: str, mid: int, name: str) -> str:
+    """改一台机的名字：机台名 + 它下面所有码表位一起改，**不新建机台**（2026-11-26 修）。
+
+    · 只改名字，不动 units.code（二维码贴纸已经贴出去了）
+    · 撞到别家同名机台直接报错，不偷偷合并
+    · 两段改名，避开 UNIQUE(shop_id,name)
+    """
+    new_base = machine_base(name) or name
+    row = c.execute("SELECT name FROM machines WHERE id=?", (mid,)).fetchone()
+    if not row:
+        raise RuntimeError("找不到这台机")
+    clash = c.execute("SELECT id FROM machines WHERE shop_id=? AND name=? AND id<>?",
+                      (shop_id, new_base, mid)).fetchone()
+    if clash:
+        raise RuntimeError("已经有一台叫「%s」的机台了，改个别的名字" % new_base)
+    units = [dict(r) for r in c.execute(
+        "SELECT id, pos FROM units WHERE machine_id=? ORDER BY COALESCE(pos,99), id", (mid,))]
+    for u in units:                                # 先全部挪成临时名，避免互相撞
+        c.execute("UPDATE units SET name=? WHERE id=?", ("~ren-%d" % u["id"], u["id"]))
+    c.execute("UPDATE machines SET name=? WHERE id=?", (new_base, mid))
+    used = set()
+    for i, u in enumerate(units, start=1):
+        pos = u["pos"] or i
+        while True:
+            nm = new_base if pos == 1 else "%s P%d" % (new_base, pos)
+            if nm not in used:
+                break
+            pos += 1
+        used.add(nm)
+        other = c.execute("SELECT id FROM units WHERE shop_id=? AND name=? AND id<>?",
+                          (shop_id, nm, u["id"])).fetchone()
+        if other:                                  # 别的机器/空壳占着这个名字，先挪开
+            c.execute("UPDATE units SET name=? WHERE id=?", ("~old-%d" % other["id"], other["id"]))
+        c.execute("UPDATE units SET name=?, pos=? WHERE id=?", (nm, pos, u["id"]))
+    return new_base
+
+
+def save_unit(b: dict, pos_map: dict | None = None) -> dict:
     shop_id = guard_shop(b["shop_id"])
     name = (b.get("name") or "").strip()
     if not name:
         raise RuntimeError("机台名不能为空")
-    shared = 1 if b.get("shared") else 0
-    kind = b.get("kind") if b.get("kind") in ("pusher", "pachinko") else "pusher"
+    kind = b.get("kind") if b.get("kind") in ("pusher", "pachinko") else None
     raw = b.get("comms") or ""
     if isinstance(raw, list):
         comms = [str(x).strip() for x in raw if str(x).strip()]
     else:
         comms = [x.strip() for x in str(raw).replace("，", ",").split(",") if x.strip()]
-    if not comms:
+    # 手工店没有卡头：允许建一台「只抄表」的码表位
+    no_comm = not comms
+    if no_comm and ((shop_row(shop_id) or {}).get("provider") or "baodian") != "manual":
         raise RuntimeError("至少要填一个通讯ID")
 
+    skipped = []
     with conn() as c:
-        mid = ensure_machine(c, shop_id, name, kind)
+        uid0 = int(b["id"]) if str(b.get("id") or "").strip() else 0
+        # 卡头（通讯ID）已经属于别的门店时不许抢：宝点里留着搬走的旧设备记录，
+        # 同号卡头会在两家店的后台清单里同时出现（浏阳 慢车道/夹机同学 8 个头，2026-11-27）。
+        if comms:
+            marks = ",".join("?" * len(comms))
+            other = [r["comm_id"] for r in c.execute(
+                "SELECT m.comm_id FROM comms m JOIN units u ON u.id=m.unit_id "
+                "WHERE m.comm_id IN (%s) AND u.shop_id<>?" % marks, (*comms, shop_id))]
+            if other:
+                skipped = other
+                comms = [x for x in comms if x not in other]
+                if not comms:
+                    return {"ok": True, "id": None, "machine_id": None, "slots": 0,
+                            "name": name, "skipped": other}
+        # 手工新增时不许重名：同名一律拒绝（后台同步/改名走别的入口）
+        if b.get("strict") and not uid0:
+            dup = c.execute("SELECT 1 FROM machines WHERE shop_id=? AND name=? LIMIT 1",
+                            (shop_id, name)).fetchone()
+            if dup:
+                raise RuntimeError("已经有一台叫「%s」的机台了，换个名字" % name)
+        if uid0:
+            row = c.execute("SELECT * FROM units WHERE id=? AND shop_id=?",
+                            (uid0, shop_id)).fetchone()
+            if not row:
+                raise RuntimeError("找不到这台码表")
+            mid = row["machine_id"]
+            if not mid:                            # 老数据：先挂到它自己的机台上
+                mid = ensure_machine(c, shop_id, name, kind or "pusher")
+                c.execute("UPDATE units SET machine_id=? WHERE id=?", (mid, uid0))
+        else:
+            mid = ensure_machine(c, shop_id, name, kind or "pusher")
+        # 表单没带 kind 时沿用原来的（别把弹珠机改成推币机）
+        if not kind:
+            kind = (c.execute("SELECT kind FROM machines WHERE id=?", (mid,)).fetchone()["kind"]
+                    or "pusher")
+        # 改名（也顺手把码表位名字理成 base / base Pn）；不再新建一台机
+        base = rename_machine(c, shop_id, mid, name)
+        # 共用码表只认机台本身的标记（同步时按「屏幕机 / 凤凰城这类」打的），
+        # 不能被表单里 cm.length>1 带来的 shared 随手翻成共用——否则一改这台机，
+        # 4 块独立码表会被并成一块（2026-11-26 修）
+        cur_shared = c.execute("SELECT shared FROM machines WHERE id=?", (mid,)).fetchone()["shared"]
+        is_shared = 1 if cur_shared else 0      # 只认人工合并过的
+
         c.execute("UPDATE machines SET shared=?, active=1, kind=?, brand=? WHERE id=?",
-                  (shared, kind, (b.get("brand") or "").strip() or None, mid))
-        base = c.execute("SELECT name FROM machines WHERE id=?", (mid,)).fetchone()["name"]
-        # this machine 现有的码表位
+                  (is_shared, kind, (b.get("brand") or "").strip() or None, mid))
         slots = [dict(r) for r in c.execute(
-            "SELECT * FROM units WHERE machine_id=? ORDER BY pos, id", (mid,))]
+            "SELECT * FROM units WHERE machine_id=? ORDER BY COALESCE(pos,99), id", (mid,))]
         keep = set(comms)
         today = date.today().isoformat()
         # 不在新清单里的卡头：解绑；位子留着但停用
@@ -3227,32 +3645,70 @@ def save_unit(b: dict) -> dict:
                     c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
                     c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
                               (_tomorrow(today), r["comm_id"]))
-        for i, cid in enumerate(comms, start=1):
-            u = next((x for x in slots if (x["pos"] or 0) == i), None)
+        # 共用码表：几个卡头装一块表；不共用：一个卡头一个码表位
+        if not comms:
+            plan = [(1, [])]
+        elif is_shared:
+            plan = [(1, comms)]
+        else:
+            # 和 Excel 一致：卡头是 P 几，看获分记录的 consoleNo；
+            # 没有 P 位的排在最后，不占别人的位子
+            pm = pos_map or {}
+            ordered = sorted(
+                enumerate(comms),
+                key=lambda iv: (pos_num(pm.get(iv[1])) or 999, iv[0]))
+            plan, used_p, nxt = [], set(), 1
+            for _i, cid in ordered:
+                pnum = pos_num(pm.get(cid))
+                if pnum and pnum not in used_p:
+                    pos = pnum
+                else:
+                    while nxt in used_p:
+                        nxt += 1
+                    pos = nxt
+                used_p.add(pos)
+                plan.append((pos, [cid]))
+            plan.sort(key=lambda x: x[0])
+        assigned = set()
+        first_id = None
+        for pos, cids in plan:
+            u = next((x for x in slots if (x["pos"] or 0) == pos), None)
             if u is None:
-                nm = base if i == 1 else "%s P%d" % (base, i)
+                nm = base if pos == 1 else "%s P%d" % (base, pos)
                 c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,pos,"
-                          "machine_id,from_day,brand) VALUES(?,?,?,0,1,1,?,?,?,?,?) "
+                          "machine_id,from_day,brand) VALUES(?,?,?,?,1,1,?,?,?,?,?) "
                           "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, locked=1, "
                           "machine_id=excluded.machine_id, pos=excluded.pos",
-                          (shop_id, nm, b.get("team"), kind, i, mid, today,
+                          (shop_id, nm, b.get("team"), is_shared, kind, pos, mid,
+                           "2020-01-01",
                            (b.get("brand") or "").strip() or None))
-                u = c.execute("SELECT * FROM units WHERE shop_id=? AND name=?",
-                              (shop_id, nm)).fetchone()
-                slots.append(dict(u))
-            c.execute("UPDATE units SET active=1, locked=1, machine_id=?, pos=? WHERE id=?",
-                      (mid, i, u["id"]))
-            c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
-                      "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
-                      "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
-                      (cid, u["id"], now()))
-            comm_owner_set(c, cid, u["id"], shop_id, today)
-        # 多出来的位子停用（保留历史读数）
+                u = dict(c.execute("SELECT * FROM units WHERE shop_id=? AND name=?",
+                                   (shop_id, nm)).fetchone())
+                slots.append(u)
+            c.execute("UPDATE units SET active=1, locked=1, machine_id=?, pos=?, shared=? "
+                      "WHERE id=?", (mid, pos, is_shared, u["id"]))
+            assigned.add(u["id"])
+            if first_id is None:
+                first_id = u["id"]
+            for cid in cids:
+                c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
+                          "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
+                          "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
+                          (cid, u["id"], now()))
+                comm_owner_set(c, cid, u["id"], shop_id, today)
+        # 多出来的位子：没卡头没读数就删掉，有读数的停用
         for u in slots:
-            n = c.execute("SELECT COUNT(*) FROM comms WHERE unit_id=?", (u["id"],)).fetchone()[0]
-            if not n:
+            if u["id"] in assigned:
+                continue
+            if c.execute("SELECT 1 FROM comms WHERE unit_id=?", (u["id"],)).fetchone():
+                continue
+            if c.execute("SELECT 1 FROM readings WHERE unit_id=?", (u["id"],)).fetchone():
                 c.execute("UPDATE units SET active=0 WHERE id=?", (u["id"],))
-    return {"ok": True, "machine_id": mid, "slots": len(comms)}
+                continue
+            c.execute("DELETE FROM units WHERE id=?", (u["id"],))
+    return {"ok": True, "id": first_id, "machine_id": mid,
+            "slots": sum(len(cids) for _, cids in plan), "name": base,
+            "skipped": skipped}
 
 
 def merge_units(shop_id: str, ids: list, name: str = "", lock: bool = True) -> dict:
@@ -3275,6 +3731,8 @@ def merge_units(shop_id: str, ids: list, name: str = "", lock: bool = True) -> d
         new_name = (name or "").strip() or _re.sub(r"\s+\d{5,}$", "", keep["name"])
         c.execute("UPDATE units SET name=?, shared=1, locked=? WHERE id=?",
                   (new_name, 1 if lock else 0, keep["id"]))
+        if keep.get("machine_id"):
+            c.execute("UPDATE machines SET shared=1 WHERE id=?", (keep["machine_id"],))
         for cid in comms:
             c.execute("UPDATE comms SET unit_id=? WHERE comm_id=?", (keep["id"], cid))
             # 归属历史跟着改，否则核对页还按旧机台把几个卡头算成一台（2026-11-26）
@@ -3295,12 +3753,11 @@ def merge_units(shop_id: str, ids: list, name: str = "", lock: bool = True) -> d
 
 
 def save_machine(b: dict) -> dict:
-    """改一台机：名称 + 卡头清单。
+    """改一台机：名称 + 卡头清单（一台机多个码表位）。
 
-    不改合并状态：原来是分开的就还是分开（每个卡头一个单元），
-    原来是一块的还是一块。要合并/拆开用专门的按钮。
+    · 名字改的是「机台」，下面各码表位跟着改成 名字 / 名字 P2 …（不新建机台、不丢编号）
+    · 不动合并状态：原来是共用一块表的还是共用，原来分开的还分开
     """
-    import re as _re
     shop_id = guard_shop(b["shop_id"])
     ids = [int(x) for x in (b.get("ids") or [])]
     name = (b.get("name") or "").strip()
@@ -3320,58 +3777,69 @@ def save_machine(b: dict) -> dict:
             (shop_id, *ids))]
         if not units:
             raise RuntimeError("找不到这台机")
-        for u in units:
-            u["comms"] = [r["comm_id"] for r in c.execute(
-                "SELECT comm_id FROM comms WHERE unit_id=? ORDER BY comm_id", (u["id"],))]
-        merged_before = len(units) == 1 and len(units[0]["comms"]) > 1
+        mid = next((u["machine_id"] for u in units if u["machine_id"]), 0)
+        if not mid:                                   # 老数据：先挂到机台上
+            mid = ensure_machine(c, shop_id, name, b.get("kind") or "pusher")
+            for u in units:
+                c.execute("UPDATE units SET machine_id=? WHERE id=?", (mid, u["id"]))
+        m_kind = c.execute("SELECT kind FROM machines WHERE id=?", (mid,)).fetchone()["kind"]
+        kind = b.get("kind") if b.get("kind") in ("pusher", "pachinko") else (m_kind or "pusher")
+        base = rename_machine(c, shop_id, mid, name)
+        cur_shared = c.execute("SELECT shared FROM machines WHERE id=?", (mid,)).fetchone()["shared"]
+        shared = 1 if (cur_shared or base in SHARED_DEFAULT) else 0
+        c.execute("UPDATE machines SET shared=?, active=1, kind=?, brand=? WHERE id=?",
+                  (shared, kind, (b.get("brand") or "").strip() or None, mid))
 
-        if merged_before:
-            keep = units[0]["id"]
-            c.execute("UPDATE units SET name=?, brand=?, shared=?, locked=1, active=1 WHERE id=?",
-                      (name, (b.get("brand") or "").strip() or None,
-                       1 if len(comms) > 1 else 0, keep))
-            wanted = set(comms)
-            for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (keep,)).fetchall():
-                if r["comm_id"] not in wanted:
+        slots = [dict(r) for r in c.execute(
+            "SELECT * FROM units WHERE machine_id=? ORDER BY COALESCE(pos,99), id", (mid,))]
+        keep = set(comms)
+        for u in slots:                               # 不在清单里的卡头解绑
+            for r in c.execute("SELECT comm_id FROM comms WHERE unit_id=?", (u["id"],)):
+                if r["comm_id"] not in keep:
                     c.execute("DELETE FROM comms WHERE comm_id=?", (r["comm_id"],))
-            for cid in comms:
+                    c.execute("UPDATE comm_owner SET to_day=? WHERE comm_id=? AND to_day IS NULL",
+                              (_tomorrow(date.today().isoformat()), r["comm_id"]))
+
+        plan = ([(1, comms)] if shared
+                else [(i, [cid]) for i, cid in enumerate(comms, start=1)])
+        assigned = set()
+        for pos, cids in plan:
+            u = next((x for x in slots if (x["pos"] or 0) == pos), None)
+            if u is None:
+                nm = base if pos == 1 else "%s P%d" % (base, pos)
+                c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked,kind,pos,"
+                          "machine_id,from_day,brand) VALUES(?,?,?,?,1,1,?,?,?,?,?) "
+                          "ON CONFLICT(shop_id,name) DO UPDATE SET active=1, locked=1, "
+                          "machine_id=excluded.machine_id, pos=excluded.pos",
+                          (shop_id, nm, None, shared, (b.get("kind") or "pusher"), pos, mid,
+                           date.today().isoformat(), (b.get("brand") or "").strip() or None))
+                u = dict(c.execute("SELECT * FROM units WHERE shop_id=? AND name=?",
+                                   (shop_id, nm)).fetchone())
+                slots.append(u)
+            c.execute("UPDATE units SET name=?, pos=?, active=1, locked=1, machine_id=?, shared=?, "
+                      "brand=? WHERE id=?",
+                      (base if pos == 1 else "%s P%d" % (base, pos), pos, mid, shared,
+                       (b.get("brand") or "").strip() or None, u["id"]))
+            assigned.add(u["id"])
+            for cid in cids:
                 c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
                           "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
                           "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
-                          (cid, keep, now()))
-            return {"ok": True, "id": keep, "merged": True}
+                          (cid, u["id"], now()))
+                comm_owner_move(c, cid, u["id"], shop_id, date.today().isoformat())
 
-        # 保持分散：按通讯ID 复用单元，缺的补，多的删
-        by_comm = {}
-        for u in units:
-            for cid in u["comms"]:
-                by_comm[cid] = u["id"]
-        for cid in comms:
-            label = unique_unit_name(c, shop_id, name)
-            uid = by_comm.get(cid)
-            if uid:
-                c.execute("UPDATE units SET name=?, brand=?, shared=0, locked=1, active=1 "
-                          "WHERE id=?",
-                          (label, (b.get("brand") or "").strip() or None, uid))
-            else:
-                c.execute("INSERT INTO units(shop_id,name,team,shared,active,locked) "
-                          "VALUES(?,?,?,0,1,1) ON CONFLICT(shop_id,name) DO UPDATE SET "
-                          "active=1, locked=1", (shop_id, label, None))
-                uid = c.execute("SELECT id FROM units WHERE shop_id=? AND name=?",
-                                (shop_id, label)).fetchone()["id"]
-            c.execute("INSERT INTO comms(comm_id,unit_id,console_no,team,device,updated_at) "
-                      "VALUES(?,?,NULL,NULL,NULL,?) ON CONFLICT(comm_id) DO UPDATE SET "
-                      "unit_id=excluded.unit_id, updated_at=excluded.updated_at",
-                      (cid, uid, now()))
-        wanted = set(comms)
-        for u in units:
-            if not u["comms"]:
-                c.execute("DELETE FROM units WHERE id=?", (u["id"],))
-            elif not set(u["comms"]) & wanted:
-                c.execute("DELETE FROM readings WHERE unit_id=?", (u["id"],))
-                c.execute("DELETE FROM comms WHERE unit_id=?", (u["id"],))
-                c.execute("DELETE FROM units WHERE id=?", (u["id"],))
-    return {"ok": True, "merged": False}
+        # 多出来的码表位：没卡头没读数就删，有读数的停用
+        for u in slots:
+            if u["id"] in assigned:
+                continue
+            if c.execute("SELECT 1 FROM comms WHERE unit_id=?", (u["id"],)).fetchone():
+                continue
+            if c.execute("SELECT 1 FROM readings WHERE unit_id=?", (u["id"],)).fetchone():
+                c.execute("UPDATE units SET active=0 WHERE id=?", (u["id"],))
+                continue
+            c.execute("DELETE FROM units WHERE id=?", (u["id"],))
+    return {"ok": True, "machine_id": mid, "merged": bool(shared),
+            "slots": sum(len(cids) for _, cids in plan)}
 
 
 def split_unit(uid: int) -> dict:

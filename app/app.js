@@ -160,6 +160,8 @@ function setView(v, opts) {
   opts = opts || {};
   // 手机上不提供设置页：机台/门店维护只在电脑上做
   if (v === 'settings' && isPhone()) v = 'home';
+  // 手机只填数据，全链（总览）也不提供
+  if (v === 'overview' && isPhone()) v = 'home';
   S.view = v;
   syncDayLock();
   ['home', 'entry', 'recon', 'overview', 'settings', 'scan'].forEach((k) => {
@@ -203,7 +205,9 @@ function welcomeDialog(b) {
   go.focus();
 
   // 一出现就记下：保证这家店只弹这一次，不依赖用户点没点
-  api('/api/shop/welcome', { shop_id: b.shop_id }).catch(() => {});
+  api('/api/shop/welcome', { shop_id: S.shopId || b.shop_id })
+    .then(() => { b.units_confirmed = b.units_confirmed || 'now'; })
+    .catch(() => {});
 
   go.addEventListener('click', () => {
     scrim.remove();
@@ -1165,6 +1169,8 @@ async function loadRecon() {
 
 function renderRecon() {
   const d = S.recon;
+  // 手机只填数据，不给导出入口
+  if ($('btnExport')) $('btnExport').hidden = isPhone();
   if (!d) return;
   const s = d.summary || {};
   $('reconLede').textContent = d.day + ' · '
@@ -1765,8 +1771,8 @@ async function openShop(shop) {
   $('unitPane').hidden = false;
   $('unitTitle').textContent = shop.name;
   $('btnBackShops').hidden = S.role === 'store';
-  if ($('btnBdSync')) $('btnBdSync').hidden = (shop.provider || 'baodian') !== 'baodian';
-  if ($('btnJjSync')) $('btnJjSync').hidden = (shop.provider || '') !== 'jingjian';
+  if ($('btnBdSync')) $('btnBdSync').hidden = ['manual'].includes(shop.provider || 'baodian');
+  if ($('btnJjSync')) $('btnJjSync').hidden = true;   // 已并入「从后台同步机台信息」
   await renderUnits();
 }
 
@@ -1793,117 +1799,52 @@ async function syncJjComms(btn) {
 
 /* 从后台同步机台信息：拉清单 → 勾选 → 写入（名称/类型/卡头/P位 以后台为准） */
 async function openBdSync(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '拉取中…（约15秒）'; }
-  let d;
+  const oldLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '拉取中…'; }
+  let job;
   try {
-    d = await api('/api/manage/bd-sync/preview?shop_id=' + encodeURIComponent(MSHOP.id));
+    job = await api('/api/manage/bd-sync/start', { shop_id: MSHOP.id, days: 14 });
   } catch (e) {
     toast(String(e.message || e), 'bad');
-    if (btn) { btn.disabled = false; btn.textContent = '从后台同步机台信息'; }
+    if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
     return;
   }
-  if (btn) { btn.disabled = false; btn.textContent = '从后台同步机台信息'; }
 
-  const rows = d.rows || [];
   const root = el('div');
   root.style.cssText = 'position:fixed;inset:0;z-index:80;display:flex;align-items:center;'
     + 'justify-content:center;background:rgba(0,0,0,.45);padding:16px';
+  let timer = null;
   const close = () => {
+    if (timer) clearInterval(timer);
     document.removeEventListener('keydown', onKey);
     document.body.style.overflow = '';
     root.remove();
+    if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
   };
-  const onKey = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
-  };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
   document.addEventListener('keydown', onKey);
   document.body.style.overflow = 'hidden';
   root.addEventListener('click', (e) => { if (e.target === root) close(); });
+
   const box = el('div');
   box.style.cssText = 'width:min(980px,96vw);max-height:86vh;overflow:auto;padding:20px;'
     + 'background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35)';
-  const dlgHead = el('div');
-  dlgHead.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px';
-  const dlgTitle = el('h2', 'dlg__t', '从后台同步机台信息');
-  dlgTitle.style.cssText = 'margin:0;font-size:20px;font-weight:600';
-  dlgHead.appendChild(dlgTitle);
-  const xBtn = el('button', 'btn btn--quiet', '×');
-  xBtn.type = 'button';
-  xBtn.setAttribute('aria-label', '关闭');
-  xBtn.style.cssText = 'font-size:20px;line-height:1;padding:2px 10px';
-  xBtn.addEventListener('click', close);
-  dlgHead.appendChild(xBtn);
-  box.appendChild(dlgHead);
-  box.appendChild(el('p', 'dlg__d', '后台共 ' + d.devices + ' 台要写码表 · P位取到 '
-    + d.pos_have + ' 个卡头（近 ' + d.days + ' 天）· 没勾的不会动'));
+  const head = el('div');
+  head.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px';
+  const title = el('h2', 'dlg__t', '从后台同步机台信息');
+  title.style.cssText = 'margin:0;font-size:20px;font-weight:600';
+  head.appendChild(title);
+  const x = el('button', 'btn btn--quiet', '关闭');
+  x.type = 'button';
+  x.addEventListener('click', close);
+  head.appendChild(x);
+  box.appendChild(head);
 
-  const tbl = el('table');
-  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
-  const thead = el('thead');
-  const htr = el('tr');
-  htr.appendChild(el('th'));
-  ['机台', '卡头ID', 'P位'].forEach((t) => htr.appendChild(el('th', null, t)));
-  const master = document.createElement('input');
-  master.type = 'checkbox';
-  master.title = '全选 / 全不选';
-  master.setAttribute('aria-label', '全选');
-  htr.firstChild.appendChild(master);
-  thead.appendChild(htr);
-  tbl.appendChild(thead);
-  const tbody = el('tbody');
-  const items = [];
-  // 按机台种类分组：推币机一组、弹珠机一组（组里没东西就不出现）
-  const addRow = (r) => {
-    const tr = el('tr');
-    const td0 = el('td');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = r.status !== 'same';
-    cb.setAttribute('aria-label', '同步 ' + r.name);
-    td0.appendChild(cb);
-    items.push({ cb, r });
-    tr.appendChild(td0);
-    tr.appendChild(el('td', null, r.name));
-    tr.appendChild(el('td', 'comm', r.comms.join(' / ')));
-    tr.appendChild(el('td', 'comm', (r.pos || []).filter(Boolean).join(' / ') || '未标'));
-    tbody.appendChild(tr);
-  };
-  [['pusher', '推币机'], ['pachinko', '弹珠机']].forEach(([kind, label]) => {
-    const list = rows.filter((r) => (r.kind || 'pusher') === kind);
-    if (!list.length) return;
-    const gr = el('tr', 'bd-sync__grp');
-    const th = el('th', 'bd-sync__grp-t', label + ' · ' + list.length + ' 台');
-    th.colSpan = 4;
-    th.scope = 'colgroup';
-    gr.appendChild(th);
-    tbody.appendChild(gr);
-    list.forEach(addRow);
-  });
-  tbl.appendChild(tbody);
-  const refreshMaster = () => {
-    const on = items.filter((x) => x.cb.checked).length;
-    master.checked = items.length > 0 && on === items.length;
-    master.indeterminate = on > 0 && on < items.length;
-  };
-  master.addEventListener('change', () => {
-    items.forEach((x) => { x.cb.checked = master.checked; });
-    refreshMaster();
-  });
-  items.forEach((x) => x.cb.addEventListener('change', refreshMaster));
-  refreshMaster();
-  [].forEach.call(tbl.querySelectorAll('th,td'), (c) => {
-    c.style.padding = '7px 8px';
-    c.style.borderBottom = '1px solid #eee';
-    c.style.verticalAlign = 'middle';
-    c.style.whiteSpace = 'nowrap';
-  });
-  box.appendChild(tbl);
+  const desc = el('p', 'dlg__d', '正在拉取… 0 台');
+  box.appendChild(desc);
 
-  // 没认出来的宝点分组只在接口数据里留着，界面不显示（用户要求去掉这个框）
-  if ((d.orphan || []).length) {
-    box.appendChild(el('p', 'dlg__d', '后台已没有这些本地机台（不会自动停用）：'
-      + d.orphan.map((x) => x.name).join('、')));
-  }
+  const wrapTbl = el('div');
+  box.appendChild(wrapTbl);
 
   const acts = el('div', 'dlg__acts');
   const cancel = el('button', 'btn btn--quiet', '取消');
@@ -1911,18 +1852,97 @@ async function openBdSync(btn) {
   cancel.addEventListener('click', close);
   const ok = el('button', 'btn btn--primary', '同步');
   ok.type = 'button';
+  ok.disabled = true;
+  acts.appendChild(cancel);
+  acts.appendChild(ok);
+  box.appendChild(acts);
+  root.appendChild(box);
+  document.body.appendChild(root);
+
+  let items = [];
+
+  function renderTable(rows, orphan) {
+    wrapTbl.innerHTML = '';
+    const tbl = el('table');
+    tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+    const thead = el('thead');
+    const htr = el('tr');
+    htr.appendChild(el('th'));
+    ['机台', '卡头ID', 'P位'].forEach((t) => htr.appendChild(el('th', null, t)));
+    const master = document.createElement('input');
+    master.type = 'checkbox';
+    master.title = '全选 / 全不选';
+    master.setAttribute('aria-label', '全选');
+    htr.firstChild.appendChild(master);
+    thead.appendChild(htr);
+    tbl.appendChild(thead);
+    const tbody = el('tbody');
+    items = [];
+
+    const addRow = (r) => {
+      const tr = el('tr');
+      const td0 = el('td');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = r.status !== 'same';
+      cb.setAttribute('aria-label', '同步 ' + r.name);
+      td0.appendChild(cb);
+      items.push({ cb, r });
+      tr.appendChild(td0);
+      tr.appendChild(el('td', null, r.name));
+      tr.appendChild(el('td', 'comm', r.comms.join(' / ')));
+      tr.appendChild(el('td', 'comm', (r.pos || []).filter(Boolean).join(' / ') || '未标'));
+      tbody.appendChild(tr);
+    };
+    [['pusher', '推币机'], ['pachinko', '弹珠机']].forEach(([kind, label]) => {
+      const list = rows.filter((r) => (r.kind || 'pusher') === kind);
+      if (!list.length) return;
+      const gr = el('tr', 'bd-sync__grp');
+      const th = el('th', 'bd-sync__grp-t', label + ' · ' + list.length + ' 台');
+      th.colSpan = 4;
+      th.scope = 'colgroup';
+      gr.appendChild(th);
+      tbody.appendChild(gr);
+      list.forEach(addRow);
+    });
+    tbl.appendChild(tbody);
+    const refreshMaster = () => {
+      const on = items.filter((z) => z.cb.checked).length;
+      master.checked = items.length > 0 && on === items.length;
+      master.indeterminate = on > 0 && on < items.length;
+    };
+    master.addEventListener('change', () => {
+      items.forEach((z) => { z.cb.checked = master.checked; });
+      refreshMaster();
+    });
+    items.forEach((z) => z.cb.addEventListener('change', refreshMaster));
+    refreshMaster();
+    [].forEach.call(tbl.querySelectorAll('th,td'), (c) => {
+      c.style.padding = '7px 8px';
+      c.style.borderBottom = '1px solid #eee';
+      c.style.verticalAlign = 'middle';
+      c.style.whiteSpace = 'nowrap';
+    });
+    wrapTbl.appendChild(tbl);
+    if ((orphan || []).length) {
+      wrapTbl.appendChild(el('p', 'dlg__d', '后台没有这些本机机台（不会自动停用）：'
+        + orphan.map((o) => o.name).join('、')));
+    }
+    ok.disabled = items.length === 0;
+  }
+
   ok.addEventListener('click', async () => {
-    const picked = items.filter((x) => x.cb.checked).map((x) => ({
-      unit_id: x.r.local ? x.r.local.unit_id : null,
-      name: x.r.name, kind: x.r.kind, comms: x.r.comms, pos: x.r.pos,
+    const picked = items.filter((z) => z.cb.checked).map((z) => ({
+      unit_id: z.r.local ? z.r.local.unit_id : null,
+      name: z.r.name, kind: z.r.kind, comms: z.r.comms, pos: z.r.pos,
     }));
-    if (!picked.length) { toast('一台都没勾', 'bad'); return; }
+    if (!picked.length) { toast('一台都没选', 'bad'); return; }
     ok.disabled = true;
     ok.textContent = '同步中…';
     try {
       const res = await api('/api/manage/bd-sync/apply', { shop_id: MSHOP.id, items: picked });
-      toast('同步完成：新增 ' + res.created + ' · 更新 ' + res.updated
-        + ' · 写入P位 ' + res.pos + (res.merged ? ' · 并掉旧行 ' + res.merged : ''));
+      toast('同步完成：新建 ' + res.created + ' 台、更新 ' + res.updated
+        + ' 台、写入P位 ' + res.pos + (res.merged ? '、停用 ' + res.merged : ''));
       close();
       await renderUnits();
     } catch (e) {
@@ -1931,11 +1951,32 @@ async function openBdSync(btn) {
       ok.textContent = '同步';
     }
   });
-  acts.appendChild(cancel);
-  acts.appendChild(ok);
-  box.appendChild(acts);
-  root.appendChild(box);
-  document.body.appendChild(root);
+
+  const tick = async () => {
+    let p;
+    try {
+      p = await api('/api/manage/bd-sync/progress?job_id=' + encodeURIComponent(job.job_id));
+    } catch (e) {
+      desc.textContent = '拉取失败：' + String(e.message || e);
+      if (timer) clearInterval(timer);
+      return;
+    }
+    if (p.state === 'running') {
+      desc.textContent = '正在拉取… ' + p.done + '/' + (p.total || '?') + ' 台'
+        + '（已拿到 ' + p.pos + ' 个 P 位）';
+      return;
+    }
+    if (timer) clearInterval(timer);
+    if (p.state === 'error') {
+      desc.textContent = '拉取失败：' + p.error;
+      return;
+    }
+    desc.textContent = '后台共 ' + p.devices + ' 台要写码表 · P位取到 ' + p.pos_have
+      + ' 个卡头（近 ' + p.days + ' 天）· 没勾的不会动';
+    renderTable(p.rows || [], p.orphan || []);
+  };
+  tick();
+  timer = setInterval(tick, 900);
 }
 
 async function renderUnits() {
@@ -1946,9 +1987,26 @@ async function renderUnits() {
 
 
   if (!d.rows.length) {
+    // 选了新增就给表单（空店铺没有分组标题，表单得单独渲染）
+    if (ADD_KIND) {
+      wrap.appendChild(addMachineForm(ADD_KIND, null));
+      return;
+    }
     const empty = el('div', 'empty');
     empty.appendChild(el('p', 'empty__t', '还没有机台'));
-    empty.appendChild(el('p', 'empty__d', '下面新增一台'));
+    const isManual = (MSHOP.provider || MSHOP.provider === undefined) === 'manual'
+      || (S.shops.find((x) => x.id === MSHOP.id) || {}).provider === 'manual';
+    empty.appendChild(el('p', 'empty__d',
+      isManual ? '这家店是纯手工店，直接新增一台' : '从后台同步，或者手动新增一台'));
+    const addOne = el('button', 'btn btn--sm btn--primary', '+ 新增一台');
+    addOne.type = 'button';
+    addOne.setAttribute('aria-label', '新增一台');
+    addOne.style.marginTop = '10px';
+    addOne.addEventListener('click', () => {
+      ADD_KIND = ADD_KIND || 'pusher';
+      renderUnits();
+    });
+    empty.appendChild(addOne);
     wrap.appendChild(empty);
     return;
   }
@@ -2061,7 +2119,7 @@ function addMachineForm(kind) {
 
     sel.addEventListener('change', () => {
       newIn.hidden = sel.value !== '__new__';
-      if (!newIn.hidden) newIn.focus();
+      if (newIn && !newIn.hidden) newIn.focus();
     });
     box.appendChild(brandWrap);
     getBrand = () => (sel.value === '__new__' ? newIn.value.trim() : sel.value);
@@ -2069,7 +2127,10 @@ function addMachineForm(kind) {
 
   // ---------- 机台列表 ----------
   const bar = el('div', 'add-panel__bar');
-  bar.appendChild(el('span', 'add-panel__k', '从宝点选择'));
+  // 纯手工店没有后台可拉，直接用手工录入那一段
+  const isManual = (MSHOP && MSHOP.provider === 'manual');
+  if (isManual) bar.hidden = true;
+  bar.appendChild(el('span', 'add-panel__k', '从后台选择'));
   const countTip = el('span', 'add-panel__count', '');
   bar.appendChild(countTip);
   const pull = el('button', 'btn btn--sm btn--quiet', '重新拉取');
@@ -2100,6 +2161,11 @@ function addMachineForm(kind) {
   };
 
   const load = async () => {
+    // 纯手工店没有后台可拉，直接用手工录入
+    if ((MSHOP || {}).provider === 'manual') {
+      listBox.innerHTML = '';
+      return;
+    }
     pull.disabled = true;
     listBox.innerHTML = '';
     listBox.appendChild(el('p', 'add-panel__hint', '正在从宝点取最近三天的机台…'));
@@ -2202,7 +2268,8 @@ function addMachineForm(kind) {
 
   // ---------- 手工添加 ----------
   const manual = el('details', 'add-panel__manual');
-  manual.appendChild(el('summary', '', '宝点里没有，手工录'));
+  if ((MSHOP || {}).provider === 'manual') manual.open = true;
+  manual.appendChild(el('summary', '', '后台里没有，手工录'));
   const form = el('div', 'add-form');
 
   const f1 = el('label', 'field');
@@ -2271,7 +2338,7 @@ function addMachineForm(kind) {
   addBtn.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   addBtn.addEventListener('click', () => {
     const inp = addChip('');
-    inp.focus();
+    if (inp) inp.focus();
   });
   addLi.appendChild(addBtn);
   ul.appendChild(addLi);
@@ -2288,8 +2355,14 @@ function addMachineForm(kind) {
   save.addEventListener('click', async () => {
     const nm = name.value.trim();
     const parts = [...ul.querySelectorAll('.chip__in')].map((i) => i.value.trim()).filter(Boolean);
-    if (!nm) { toast('填机台名', 'bad'); name.focus(); return; }
-    if (!parts.length) { toast('填至少一个卡头', 'bad'); ul.querySelector('.chip__in').focus(); return; }
+    if (!nm) { toast('填机台名', 'bad'); if (name) name.focus(); return; }
+    const needComm = (MSHOP || {}).provider !== 'manual';
+    if (needComm && !parts.length) {
+      toast('填至少一个卡头', 'bad');
+      const ci = ul.querySelector('.chip__in');
+      if (ci) ci.focus();
+      return;
+    }
     if (new Set(parts).size !== parts.length) { toast('卡头有重复', 'bad'); return; }
     const br = getBrand();
     if (kind === 'pachinko' && !br) { toast('先选品牌', 'bad'); return; }
@@ -2298,7 +2371,7 @@ function addMachineForm(kind) {
       await api('/api/manage/unit/save', {
         shop_id: MSHOP.id, name: nm, comms: parts.join(','), kind,
         brand: kind === 'pachinko' ? br : undefined,
-        shared: parts.length > 1,
+        shared: parts.length > 1, strict: true,
       });
       toast('已新增');
       untrackDlg(closeAddPanel);
@@ -2910,6 +2983,18 @@ async function boot() {
       await api('/api/shops', { name: it.label }).catch(() => {});
       const bb = await api('/api/bootstrap');
       S.units = bb.units;
+      // 设置页正停在某家店的机台里：换店要退回门店列表，否则还按上一家店操作
+      if (S.view === 'settings') {
+        MSHOP = null;
+        MUNIT = null;
+        MGROUP = null;
+        EDIT_KEY = null;
+        const up = $('unitPane');
+        const sp = $('shopPane');
+        if (up) up.hidden = true;
+        if (sp) sp.hidden = false;
+        await loadSettings();
+      }
       await loadEntry();
       if (S.view === 'recon') loadRecon();
       if (S.view === 'overview') loadOverview();
@@ -2956,7 +3041,8 @@ async function boot() {
       setTimeout(() => clearInterval(poll), 120000);
     }
   } catch (e) { /* 忽略 */ }
-  if (!b.units_confirmed && !isPhone()) welcomeDialog(b);
+  if (!b.units_confirmed && !isPhone() && S.shopId && S.view !== 'settings')
+    welcomeDialog(b);
 
   if (scanHit) {
     if (S.role === 'hq' && scanHit.shop && scanHit.shop.id) {
@@ -3128,7 +3214,7 @@ function applyRole() {
   document.body.dataset.role = store ? 'store' : 'hq';
   $('tools').hidden = false;
   const navOv = document.querySelector('.nav__item[data-view="overview"]');
-  if (navOv) navOv.hidden = store;   // 门店看不到全链
+  if (navOv) navOv.hidden = store || isPhone();   // 门店、手机都看不到全链
   const shopPick = $('shopPick');
   if (shopPick) shopPick.hidden = store;   // 门店只有一家店，不用选
   $('shopBtn').disabled = store;

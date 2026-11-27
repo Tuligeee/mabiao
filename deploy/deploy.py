@@ -54,7 +54,7 @@ BD_VENV = "/opt/日报自动化_服务器部署包/.venv/bin/python"
 
 # 只传这些，数据库不在里面
 FILES = [
-    "server.py", "index.html", "app.js", "app.css",
+    "server.py", "backend_sync.py", "index.html", "app.js", "app.css",
     "ui.js", "theme.css", "tokens.css", "machine_type_map.json",
     "vendor/jsQR.js", "jingjian.py", "baodian_login.py", "shiruan.py",
 ]
@@ -63,6 +63,9 @@ FILES = [
 EXTRA = [
     ("deploy/cert_watch.py", "bin/cert_watch.py"),
     ("deploy/bd_refresh.py", "bin/bd_refresh.py"),
+    # 全量铺机台的维护脚本 + 嘻哈卡卡清单：跟着版本走，换机器也能直接重跑
+    ("deploy/sync_machines.py", "sync_machines.py"),
+    ("deploy/xiha_s21.json", "xiha_s21.json"),
 ]
 
 UNIT = """[Unit]
